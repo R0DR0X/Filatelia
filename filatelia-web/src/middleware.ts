@@ -4,7 +4,8 @@ export const config = {
   matcher: ["/admin/:path*", "/perfil"],
 };
 
-const JWT_SECRET = process.env.JWT_SECRET || "filatelia-secret-key-change-in-prod";
+// Must match APP_SECRET used by src/lib/session.ts — both default to the same dev value.
+const JWT_SECRET = process.env.APP_SECRET || "dev-secret-only-change-in-prod";
 
 async function verifyJwtPayload(token: string): Promise<Record<string, any> | null> {
   try {

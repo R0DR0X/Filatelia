@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateOAuthState, verifyOAuthState, getGoogleAuthUrl, exchangeCodeForToken, getGoogleUserProfile } from "@/lib/auth-google";
+import { signSession } from "@/lib/session";
+
+export const runtime = 'edge';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -43,9 +46,8 @@ export async function GET(request: NextRequest) {
     };
 
     const response = NextResponse.redirect(new URL("/perfil", request.url));
-    
+
     // Set secure fp_session cookie
-    const { signSession } = await import("@/lib/session");
     const signedToken = await signSession(userPayload);
     response.cookies.set("fp_session", signedToken, {
       httpOnly: true,

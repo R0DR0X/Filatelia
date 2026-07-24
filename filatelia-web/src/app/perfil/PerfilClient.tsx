@@ -121,7 +121,7 @@ export default function PerfilClient() {
       }
 
       // Fetch user collection
-      fetch("/api/collection")
+      const collectionFetch = fetch("/api/collection")
         .then((res) => res.json())
         .then((data) => {
           if (data.success && Array.isArray(data.items)) {
@@ -132,7 +132,7 @@ export default function PerfilClient() {
 
       // Fetch trade matches
       setLoadingMatches(true);
-      fetch("/api/match")
+      const matchFetch = fetch("/api/match")
         .then((res) => res.json())
         .then((data) => {
           if (data.success && Array.isArray(data.proposals)) {
@@ -142,7 +142,9 @@ export default function PerfilClient() {
         .catch(console.error)
         .finally(() => setLoadingMatches(false));
 
-      setLoading(false);
+      Promise.allSettled([collectionFetch, matchFetch]).finally(() => {
+        setLoading(false);
+      });
     });
   }, [router]);
 

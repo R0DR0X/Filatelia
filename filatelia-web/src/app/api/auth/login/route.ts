@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { signSession, verifySession } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV !== "development") {
+    return NextResponse.json({ error: "Not implemented in production" }, { status: 501 });
+  }
+
   try {
     const body = await request.json();
     const { email, password } = body;
@@ -18,7 +23,8 @@ export async function POST(request: NextRequest) {
     };
 
     const response = NextResponse.json({ success: true, user });
-    response.cookies.set("fp_session", JSON.stringify(user), {
+    const signedToken = await signSession(user);
+    response.cookies.set("fp_session", signedToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       path: "/",
@@ -38,10 +44,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
 
-  try {
-    const user = JSON.parse(sessionCookie);
-    return NextResponse.json({ authenticated: true, user });
-  } catch {
+  const user = await verifySession(sessionCookie);
+  if (!user) {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }
+  
+  return NextResponse.json({ authenticated: true, user });
 }

@@ -2,27 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserCollection, addCollectionItem, updateCollectionItem, deleteCollectionItem } from "@/lib/db/collection";
 import { ListType, ConditionGrade } from "@/types/collection";
 
-function getUserIdFromSession(request: NextRequest): string | null {
+import { verifySession } from "@/lib/session";
+
+async function getUserIdFromSession(request: NextRequest): Promise<string | null> {
   const sessionCookie = request.cookies.get("fp_session")?.value;
   if (!sessionCookie) {
-    const authHeader = request.headers.get("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.substring(7);
-      if (token.startsWith("usr_")) return token;
-    }
     return null;
   }
 
-  try {
-    const parsed = JSON.parse(sessionCookie);
-    return parsed.id || null;
-  } catch {
-    return sessionCookie.startsWith("usr_") ? sessionCookie : null;
-  }
+  const payload = await verifySession(sessionCookie);
+  return payload?.id || null;
 }
 
 export async function GET(request: NextRequest) {
-  const userId = getUserIdFromSession(request);
+  const userId = await getUserIdFromSession(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
@@ -39,7 +32,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const userId = getUserIdFromSession(request);
+  const userId = await getUserIdFromSession(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
@@ -73,7 +66,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const userId = getUserIdFromSession(request);
+  const userId = await getUserIdFromSession(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
@@ -94,7 +87,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const userId = getUserIdFromSession(request);
+  const userId = await getUserIdFromSession(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }

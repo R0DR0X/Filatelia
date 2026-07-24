@@ -21,11 +21,11 @@ export interface GoogleUserProfile {
  */
 export function generateOAuthState(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array)
+    .map((byte) => chars[byte % chars.length])
+    .join('');
 }
 
 /**
@@ -33,14 +33,20 @@ export function generateOAuthState(): string {
  */
 export function verifyOAuthState(receivedState: string, expectedState: string): boolean {
   if (!receivedState || !expectedState) return false;
-  return receivedState === expectedState;
+  if (receivedState.length !== expectedState.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < receivedState.length; i++) {
+    mismatch |= receivedState.charCodeAt(i) ^ expectedState.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
 /**
  * Generates Google OAuth 2.0 authorization URL.
  */
 export function getGoogleAuthUrl(state: string, redirectUri: string): string {
-  const clientId = process.env.GOOGLE_CLIENT_ID || 'mock_google_client_id';
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) throw new Error('GOOGLE_CLIENT_ID env var is required');
   const rootUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
   const options = {
     redirect_uri: redirectUri,
@@ -63,8 +69,10 @@ export function getGoogleAuthUrl(state: string, redirectUri: string): string {
  * Exchanges Google OAuth code for tokens.
  */
 export async function exchangeCodeForToken(code: string, redirectUri: string): Promise<GoogleOAuthTokens> {
-  const clientId = process.env.GOOGLE_CLIENT_ID || 'mock_google_client_id';
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || 'mock_google_client_secret';
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) throw new Error('GOOGLE_CLIENT_ID env var is required');
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientSecret) throw new Error('GOOGLE_CLIENT_SECRET env var is required');
   const url = 'https://oauth2.googleapis.com/token';
 
   const values = {
@@ -95,7 +103,7 @@ export async function exchangeCodeForToken(code: string, redirectUri: string): P
  * Fetches Google User Profile using an access token.
  */
 export async function getGoogleUserProfile(accessToken: string): Promise<GoogleUserProfile> {
-  const res = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?alt=json&access_token=${accessToken}`, {
+  const res = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?alt=json`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

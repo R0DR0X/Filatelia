@@ -45,7 +45,9 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(new URL("/perfil", request.url));
     
     // Set secure fp_session cookie
-    response.cookies.set("fp_session", JSON.stringify(userPayload), {
+    const { signSession } = await import("@/lib/session");
+    const signedToken = await signSession(userPayload);
+    response.cookies.set("fp_session", signedToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       path: "/",

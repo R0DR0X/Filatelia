@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { GET, POST, PUT, DELETE } from "../src/app/api/collection/route";
 import { NextRequest } from "next/server";
 import { resetCollectionStore } from "../src/lib/db/collection";
+import { signSession } from "../src/lib/session";
 
 test("test_collection_api_unauthenticated_rejected: /api/collection returns 401 when unauthenticated", async () => {
   const request = new NextRequest("http://localhost:3000/api/collection");
@@ -13,12 +14,14 @@ test("test_collection_api_unauthenticated_rejected: /api/collection returns 401 
 });
 
 test("test_collection_invalid_enum_rejected: POST /api/collection rejects invalid list_type or condition enum values", async () => {
+  const token = await signSession({ id: "usr_test", name: "Test User" });
+  
   // Test invalid list_type
   const reqInvalidType = new NextRequest("http://localhost:3000/api/collection", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Cookie: "fp_session=" + JSON.stringify({ id: "usr_test", name: "Test User" }),
+      Cookie: "fp_session=" + token,
     },
     body: JSON.stringify({ stampId: "PE-1857-01", listType: "stolen", condition: "MNH" }),
   });
@@ -31,7 +34,7 @@ test("test_collection_invalid_enum_rejected: POST /api/collection rejects invali
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Cookie: "fp_session=" + JSON.stringify({ id: "usr_test", name: "Test User" }),
+      Cookie: "fp_session=" + token,
     },
     body: JSON.stringify({ stampId: "PE-1857-01", listType: "wishlist", condition: "SUPER_PERFECT" }),
   });
@@ -43,7 +46,8 @@ test("test_collection_invalid_enum_rejected: POST /api/collection rejects invali
 test("CRUD operations on /api/collection for authenticated user", async () => {
   resetCollectionStore();
 
-  const sessionCookie = "fp_session=" + JSON.stringify({ id: "usr_collector_99", name: "Collector 99" });
+  const token = await signSession({ id: "usr_collector_99", name: "Collector 99" });
+  const sessionCookie = "fp_session=" + token;
 
   // 1. Add stamp to collection (POST)
   const postReq = new NextRequest("http://localhost:3000/api/collection", {

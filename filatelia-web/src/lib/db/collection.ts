@@ -79,7 +79,8 @@ export async function getUserCollection(userId: string, listType?: ListType): Pr
 }
 
 export async function getAllUserCollections(): Promise<UserCollectionItem[]> {
-  return [...collectionStore];
+  // TODO: replace with paginated D1 query when D1 is wired
+  return collectionStore.slice(0, 5000);
 }
 
 export async function addCollectionItem(userId: string, payload: CollectionRequestPayload): Promise<UserCollectionItem> {

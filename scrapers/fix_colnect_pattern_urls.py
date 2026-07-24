@@ -171,13 +171,17 @@ def fetch_null_image_stamps(limit=300):
     sql = f"""
         SELECT id, nameEs, nameEn, countryCode, year, sourceUrl
         FROM Stamp
-        WHERE (imageUrl IS NULL OR imageUrl = '' OR imageUrl LIKE '%none_logged_image%')
+        WHERE (imageUrl IS NULL OR imageUrl = '' OR imageUrl LIKE '%none_logged_image%' OR imageUrl LIKE '%pass-challenge%')
           AND source = 'colnect'
         LIMIT {limit}
     """
-    res = requests.post(API_URL, json={"sql": sql, "params": []}, timeout=30)
-    if res.ok and res.json().get("success"):
-        return res.json().get("results", [])
+    try:
+        res = requests.post(API_URL, json={"sql": sql, "params": []}, timeout=30)
+        if res.ok:
+            data = res.json()
+            return data.get("results", [])
+    except Exception as e:
+        print(f"  ⚠️  Error fetch_null_image_stamps: {e}", flush=True)
     return []
 
 

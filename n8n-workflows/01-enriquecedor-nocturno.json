@@ -1,0 +1,109 @@
+{
+  "name": "01 - Enriquecedor Nocturno con Claude (02:00 UTC)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "cronExpression": "0 2 * * *"
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron - 02:00 UTC Daily",
+      "type": "n8n-nodes-base.schedule",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FILATELIA_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev' }}/query",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"sql\": \"SELECT id FROM Stamp WHERE descriptionEs IS NULL OR rarityScore IS NULL LIMIT 100\"\n}"
+      },
+      "id": "d1-query-enrich",
+      "name": "Cloudflare D1 - Get Stamps To Enrich",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "={{ $json.results ? $json.results.length : 0 }}",
+            "operator": "greaterThan",
+            "rightValue": 0
+          }
+        }
+      },
+      "id": "if-has-stamps",
+      "name": "IF - Hay sellos por enriquecer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "command": "node scrapers/04-ai-enricher.mjs --limit=100"
+      },
+      "id": "execute-ai-script",
+      "name": "Execute Command - scrapers/04-ai-enricher.mjs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [600, 0]
+    }
+  ],
+  "connections": {
+    "Cron - 02:00 UTC Daily": {
+      "main": [
+        [
+          {
+            "node": "Cloudflare D1 - Get Stamps To Enrich",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cloudflare D1 - Get Stamps To Enrich": {
+      "main": [
+        [
+          {
+            "node": "IF - Hay sellos por enriquecer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Hay sellos por enriquecer?": {
+      "main": [
+        [
+          {
+            "node": "Execute Command - scrapers/04-ai-enricher.mjs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["filatelia", "enriquecedor", "claude", "nocturno", "02:00 UTC"]
+}

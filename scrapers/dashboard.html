@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Filatelia Scraper Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #07090e;
+      --card-bg: rgba(20, 24, 35, 0.4);
+      --card-border: rgba(255, 255, 255, 0.06);
+      --text: #f0f2f5;
+      --text-muted: #8b9bb4;
+      --primary: #3b82f6;
+      --primary-glow: rgba(59, 130, 246, 0.15);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.15);
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.15);
+      --warning: #f59e0b;
+      --accent: #8b5cf6;
+      --font-sans: 'Outfit', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2rem 4rem;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(7, 9, 14, 0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo-icon {
+      font-size: 2rem;
+      animation: spin 8s linear infinite;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fff 30%, var(--primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .global-stats {
+      display: flex;
+      gap: 2rem;
+    }
+
+    .stat-badge {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 0.5rem 1rem;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    main {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 2rem 4rem;
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 2.5rem;
+    }
+
+    @media (max-width: 1200px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .grid-section h2 {
+      margin-bottom: 1.5rem;
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .scrapers-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(8px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .card.running {
+      border-color: rgba(16, 185, 129, 0.3);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.05);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .country-info {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .flag {
+      font-size: 1.8rem;
+    }
+
+    .country-name {
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .status-indicator.active {
+      background: var(--success-glow);
+      color: var(--success);
+    }
+
+    .status-indicator.active .dot {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    .status-indicator.idle {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+
+    .status-indicator.idle .dot {
+      background: #4b5563;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; transform: scale(0.9); }
+      100% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .stats-table {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+    }
+
+    .stat-box {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-box .lbl {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .stat-box .val {
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    button {
+      padding: 0.6rem;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-start {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-start:hover {
+      background: #2563eb;
+      box-shadow: 0 0 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-stop {
+      background: var(--danger-glow);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-stop:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .btn-logs {
+      grid-column: span 2;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      border-color: var(--card-border);
+    }
+
+    .btn-logs:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+
+    .console-section {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 12rem);
+      position: sticky;
+      top: 8rem;
+    }
+
+    .console-section h2 {
+      margin-bottom: 1.5rem;
+      font-size: 1.4rem;
+      font-weight: 600;
+    }
+
+    .console-wrapper {
+      flex: 1;
+      background: #030407;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      margin-bottom: 0.75rem;
+    }
+
+    .console-title {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--primary);
+    }
+
+    .console-body {
+      flex: 1;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #34d399;
+      white-space: pre-wrap;
+      padding-right: 0.5rem;
+    }
+
+    .console-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .console-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .console-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+
+    .console-body::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .empty-console {
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 4rem;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon">✉️</div>
+      <h1>Monitor Filatélico</h1>
+    </div>
+    <div class="global-stats">
+      <div class="stat-badge">
+        <span class="stat-label">Insertados Totales</span>
+        <span class="stat-value" id="global-inserted">0</span>
+      </div>
+      <div class="stat-badge">
+        <span class="stat-label">Scrapers Activos</span>
+        <span class="stat-value" id="global-active">0</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid-section">
+      <h2>Scrapers en Paralelo</h2>
+      <div class="scrapers-grid" id="grid">
+        <!-- Generado dinámicamente -->
+      </div>
+    </section>
+
+    <section class="console-section">
+      <h2>Consola de Logs</h2>
+      <div class="console-wrapper">
+        <div class="console-header">
+          <span class="console-title" id="console-title">Ningún scraper seleccionado</span>
+          <span class="stat-label" style="font-size: 0.65rem;">Auto-refresh: 2s</span>
+        </div>
+        <div class="console-body" id="console-body">
+          <div class="empty-console">Hacé clic en "Ver Logs" en cualquier tarjeta para monitorear la salida en tiempo real.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let activeLogCountry = null;
+    let logInterval = null;
+
+    const countryEmoji = {
+      'PE': '🇵🇪', 'AR': '🇦🇷', 'CL': '🇨🇱', 'BR': '🇧🇷',
+      'MX': '🇲🇽', 'CO': '🇨🇴', 'US': '🇺🇸', 'GB': '🇬🇧',
+      'FR': '🇫🇷', 'DE': '🇩🇪', 'ES': '🇪🇸', 'IT': '🇮🇹',
+      'JP': '🇯🇵', 'CN': '🇨🇳', 'AU': '🇦🇺', 'CA': '🇨🇦',
+      'IL': '🇮🇱', 'UY': '🇺🇾', 'VE': '🇻🇪', 'BO': '🇧🇴',
+      'EC': '🇪🇨', 'PY': '🇵🇾'
+    };
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        let totalInserted = 0;
+        let activeCount = 0;
+        
+        const grid = document.getElementById('grid');
+        
+        // Mantener el scroll de la consola si está visible
+        const consoleBody = document.getElementById('console-body');
+        const isScrolledToBottom = consoleBody.scrollHeight - consoleBody.clientHeight <= consoleBody.scrollTop + 20;
+
+        // Generar o actualizar tarjetas
+        data.scrapers.forEach(s => {
+          totalInserted += s.totalInserted || 0;
+          if (s.status === 'running') activeCount++;
+          
+          let card = document.getElementById(`card-${s.code}`);
+          const emoji = countryEmoji[s.code] || '🏳️';
+          
+          if (!card) {
+            card = document.createElement('div');
+            card.id = `card-${s.code}`;
+            card.className = `card ${s.status}`;
+            grid.appendChild(card);
+          }
+          
+          card.className = `card ${s.status}`;
+          card.innerHTML = `
+            <div class="card-header">
+              <div class="country-info">
+                <span class="flag">${emoji}</span>
+                <span class="country-name">${s.name} (${s.code})</span>
+              </div>
+              <div class="status-indicator ${s.status === 'running' ? 'active' : 'idle'}">
+                <div class="dot"></div>
+                <span>${s.status === 'running' ? 'CORRIENDO' : 'IDLE'}</span>
+              </div>
+            </div>
+            
+            <div class="stats-table">
+              <div class="stat-box">
+                <span class="lbl">Pág. Actual</span>
+                <span class="val">${s.page || '-'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="lbl">Errores</span>
+                <span class="val" style="${s.totalErrors > 0 ? 'color: var(--danger)' : ''}">${s.totalErrors || 0}</span>
+              </div>
+              <div class="stat-box" style="grid-column: span 2">
+                <span class="lbl">Sellos Insertados</span>
+                <span class="val" style="color: var(--success)">${s.totalInserted || 0}</span>
+              </div>
+            </div>
+            
+            <div class="btn-group">
+              <button class="btn-start" onclick="startScraper('${s.code}')" ${s.status === 'running' ? 'disabled' : ''}>
+                ▶ Iniciar
+              </button>
+              <button class="btn-stop" onclick="stopScraper('${s.code}')" ${s.status !== 'running' ? 'disabled' : ''}>
+                ■ Detener
+              </button>
+              <button class="btn-logs" onclick="selectLogs('${s.code}', '${s.name}')">
+                📄 Ver Logs
+              </button>
+            </div>
+          `;
+        });
+        
+        document.getElementById('global-inserted').textContent = totalInserted.toLocaleString();
+        document.getElementById('global-active').textContent = activeCount;
+        
+      } catch (e) {
+        console.error('Error cargando estado:', e);
+      }
+    }
+
+    async function startScraper(code) {
+      await fetch('/api/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country: code })
+      });
+      fetchStatus();
+    }
+
+    async function stopScraper(code) {
+      await fetch('/api/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country: code })
+      });
+      fetchStatus();
+    }
+
+    async function selectLogs(code, name) {
+      activeLogCountry = code;
+      document.getElementById('console-title').textContent = `Logs: ${name} (${code})`;
+      
+      if (logInterval) clearInterval(logInterval);
+      
+      // Cargar logs inmediatamente y programar polling
+      loadLogs();
+      logInterval = setInterval(loadLogs, 2000);
+    }
+
+    async function loadLogs() {
+      if (!activeLogCountry) return;
+      try {
+        const res = await fetch(`/api/logs?country=${activeLogCountry}`);
+        const data = await res.json();
+        
+        const consoleBody = document.getElementById('console-body');
+        const isScrolledToBottom = consoleBody.scrollHeight - consoleBody.clientHeight <= consoleBody.scrollTop + 50;
+        
+        consoleBody.innerHTML = data.logs || 'Sin logs disponibles para este scraper...';
+        
+        if (isScrolledToBottom) {
+          consoleBody.scrollTop = consoleBody.scrollHeight;
+        }
+      } catch (e) {
+        console.error('Error cargando logs:', e);
+      }
+    }
+
+    // Carga inicial y bucle
+    fetchStatus();
+    setInterval(fetchStatus, 3000);
+  </script>
+</body>
+</html>

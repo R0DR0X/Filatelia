@@ -1,0 +1,26 @@
+name = "filatelia-web"
+compatibility_date = "2024-04-03"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+[vars]
+NEXT_PUBLIC_API_URL = "https://filatelia-api.rodrigopianto2005.workers.dev"
+
+# Bind D1 Database to Pages project
+[[d1_databases]]
+binding = "DB"
+database_name = "filatelia-db"
+database_id = "a06f77b8-6826-4594-8bee-48018e637e01"
+
+# Bind R2 Buckets to Pages project
+[[r2_buckets]]
+binding = "STAMPS_IMAGES"
+bucket_name = "stamps-images"
+
+[[r2_buckets]]
+binding = "STAMPS_THUMBS"
+bucket_name = "stamps-thumbs"
+
+[[r2_buckets]]
+binding = "STAMPS_BACKS"
+bucket_name = "stamps-backs"

@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Builds
+.next/
+.vercel/
+dist/
+out/
+build/
+
+# Logs & Environment
+*.log
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Scraper & Crawler Caches
+scrapers/checkpoints/colnect_browser_profile/
+*.db
+*.db-journal
+colnect_cookies.json
+colnect_debug.html
+colnect_login_error.png
+
+# System & OS
+.DS_Store
+desktop.ini
+Thumbs.db
+
+# Large Data & Media Files
+*.xlsx
+*.XLSX
+*.xls
+*.XLS
+*.cdr
+*.CDR
+*.ai
+*.AI
+.embedding_checkpoint.json
+=
+scratch/
+.atl/
+__pycache__/
+*.pyc
+puppeteer-extra
+puppeteer-extra-plugin-stealth
+web/*.cdr
+web/*.CDR
+web/*.ai
+web/*.AI
+web/*.xlsx
+web/*.XLSX

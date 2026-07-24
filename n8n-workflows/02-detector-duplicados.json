@@ -1,0 +1,135 @@
+{
+  "name": "02 - Detector de Duplicados (Domingo 3:00 AM)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "cronExpression": "0 3 * * 0"
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron - Domingo 3:00 AM",
+      "type": "n8n-nodes-base.schedule",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s1.id as id1, s1.\"nameEs\" as name1, s1.\"scottNumber\" as scott1, s1.\"wnsNumber\" as wns1, s2.id as id2, s2.\"nameEs\" as name2, s2.\"scottNumber\" as scott2, s2.\"wnsNumber\" as wns2 FROM \"Stamp\" s1 JOIN \"Stamp\" s2 ON s1.id < s2.id AND (s1.\"scottNumber\" = s2.\"scottNumber\" OR s1.\"wnsNumber\" = s2.\"wnsNumber\") WHERE s1.\"scottNumber\" IS NOT NULL OR s1.\"wnsNumber\" IS NOT NULL LIMIT 100"
+      },
+      "id": "supabase-find-dupes",
+      "name": "Supabase - Find Potential Duplicates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [200, 0],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-postgres",
+          "name": "Supabase Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "={{ $json.length }}",
+            "operator": "greaterThan",
+            "rightValue": 0
+          }
+        }
+      },
+      "id": "if-has-dupes",
+      "name": "IF - Hay duplicados?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/Stamp?id=eq.{{ $json.id2 }}",
+        "authentication": "generic",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "apikey",
+              "value": "{{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "method": "DELETE"
+      },
+      "id": "http-delete-dupe",
+      "name": "HTTP - Delete Duplicate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "subject": "🚨 Duplicados Detectados - Filatelia",
+        "text": "Se detectaron y eliminaron {{ $json.length }} duplicados en la base de datos de Filatelia. Revisar: {{ $env.SUPABASE_URL }}/project/default/editor",
+        "toEmails": "{{ $env.ADMIN_EMAIL }}"
+      },
+      "id": "email-notify",
+      "name": "Email - Notify Admin",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [800, 0]
+    }
+  ],
+  "connections": {
+    "Cron - Domingo 3:00 AM": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Find Potential Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Find Potential Duplicates": {
+      "main": [
+        [
+          {
+            "node": "IF - Hay duplicados?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Hay duplicados?": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Delete Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email - Notify Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["filatelia", "duplicados", "limpieza", "domingo"]
+}

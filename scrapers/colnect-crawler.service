@@ -1,0 +1,17 @@
+[Unit]
+Description=Colnect Swarm Crawler Service
+After=network.target
+
+[Service]
+Type=simple
+User=rodrigo
+WorkingDirectory=/home/rodrigo/filatelia
+Environment=PATH=/home/rodrigo/filatelia/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/rodrigo/filatelia/.venv/bin/python -u scrapers/colnect_swarm_crawler.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/rodrigo/filatelia/logs/crawler.log
+StandardError=append:/home/rodrigo/filatelia/logs/crawler.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,79 @@
+{
+  "offset": 10,
+  "mirrored": 10,
+  "skipped": 0,
+  "errors": 0,
+  "lastUpdated": "2026-07-23T17:29:15.443Z",
+  "items": {
+    "0001f335-2895-4177-808e-8959d6580ab8": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:13.898Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/0001f335-2895-4177-808e-8959d6580ab8.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/0001f335-2895-4177-808e-8959d6580ab8.webp"
+    },
+    "00042891-b8c0-4c63-bd77-d94346c55682": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:13.918Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/00042891-b8c0-4c63-bd77-d94346c55682.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/00042891-b8c0-4c63-bd77-d94346c55682.webp"
+    },
+    "00053ce8-32ac-49b6-aace-fdec55edce69": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:14.491Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/00053ce8-32ac-49b6-aace-fdec55edce69.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/00053ce8-32ac-49b6-aace-fdec55edce69.webp"
+    },
+    "00014079-7f00-4a10-bb9f-d2d65ef6e1e2": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:14.599Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/00014079-7f00-4a10-bb9f-d2d65ef6e1e2.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/00014079-7f00-4a10-bb9f-d2d65ef6e1e2.webp"
+    },
+    "00016527-e875-4e73-9f9c-ab0be6484498": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:14.667Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/00016527-e875-4e73-9f9c-ab0be6484498.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/00016527-e875-4e73-9f9c-ab0be6484498.webp"
+    },
+    "000324c8-4942-4b3f-96be-322191713f24": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:14.677Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/000324c8-4942-4b3f-96be-322191713f24.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/000324c8-4942-4b3f-96be-322191713f24.webp"
+    },
+    "0000689b-aa3d-488f-9d6f-8ffe09034839": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:14.864Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/0000689b-aa3d-488f-9d6f-8ffe09034839.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/0000689b-aa3d-488f-9d6f-8ffe09034839.webp"
+    },
+    "0002fde0-0f1d-4cbf-a345-d352e81b0d7a": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:14.883Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/0002fde0-0f1d-4cbf-a345-d352e81b0d7a.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/0002fde0-0f1d-4cbf-a345-d352e81b0d7a.webp"
+    },
+    "000365c0-5b0a-46a5-a1e8-3d3c3f221df2": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:15.111Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/000365c0-5b0a-46a5-a1e8-3d3c3f221df2.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/000365c0-5b0a-46a5-a1e8-3d3c3f221df2.webp"
+    },
+    "0005f035-e5bf-4f1f-8b7c-5cb2ec432013": {
+      "status": "completed",
+      "timestamp": "2026-07-23T17:29:15.443Z",
+      "dryRun": true,
+      "r2ImageUrl": "https://cdn.filatelia.app/stamps/0005f035-e5bf-4f1f-8b7c-5cb2ec432013.jpg",
+      "r2ThumbUrl": "https://cdn.filatelia.app/thumbs/0005f035-e5bf-4f1f-8b7c-5cb2ec432013.webp"
+    }
+  }
+}

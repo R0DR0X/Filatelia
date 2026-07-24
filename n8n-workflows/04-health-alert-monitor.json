@@ -1,0 +1,114 @@
+{
+  "name": "04 - Health & Alert Monitor",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "workflowId",
+              "name": "workflowId",
+              "type": "string",
+              "value": "={{ $json.workflow.id }}"
+            },
+            {
+              "id": "workflowName",
+              "name": "workflowName",
+              "type": "string",
+              "value": "={{ $json.workflow.name }}"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            },
+            {
+              "id": "errorMessage",
+              "name": "errorMessage",
+              "type": "string",
+              "value": "={{ $json.execution.error.message }}"
+            },
+            {
+              "id": "stackTrace",
+              "name": "stackTrace",
+              "type": "string",
+              "value": "={{ $json.execution.error.stack || 'No stack trace available' }}"
+            },
+            {
+              "id": "stampId",
+              "name": "stampId",
+              "type": "string",
+              "value": "={{ $json.execution.item ? $json.execution.item.id : 'N/A' }}"
+            }
+          ]
+        }
+      },
+      "id": "format-alert",
+      "name": "Format Alert Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ALERT_WEBHOOK_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev/alerts' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"level\": \"error\",\n  \"workflowId\": \"{{ $json.workflowId }}\",\n  \"workflowName\": \"{{ $json.workflowName }}\",\n  \"timestamp\": \"{{ $json.timestamp }}\",\n  \"errorMessage\": \"{{ $json.errorMessage }}\",\n  \"stackTrace\": \"{{ $json.stackTrace }}\",\n  \"stampId\": \"{{ $json.stampId }}\"\n}"
+      },
+      "id": "dispatch-webhook-alert",
+      "name": "HTTP - Dispatch Webhook Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [400, 0]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Dispatch Webhook Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["filatelia", "health", "monitor", "alert"]
+}

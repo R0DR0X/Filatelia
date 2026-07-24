@@ -1,0 +1,27 @@
+# Supabase configuration for Filatelia project
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+
+[api]
+enabled = true
+
+[db]
+port = 5432
+
+[storage]
+enabled = true
+
+[realtime]
+enabled = true
+
+# Edge Functions configuration
+[functions.identify-stamp]
+verify_jwt = true
+
+[functions.search-semantic]
+verify_jwt = false
+
+[functions.price-alert]
+verify_jwt = true

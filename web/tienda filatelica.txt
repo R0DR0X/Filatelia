@@ -1,0 +1,15 @@
+Tienda filatelica
+
+Base de dato :
+masterpe_tiendafilatelica
+usuario
+tienda
+contraseña 
+tienda202076
+
+
+Wordpress
+Usuario    :   Peruanito
+Contraseña :   tI2X45@LF)ph4@Z8G^
+
+

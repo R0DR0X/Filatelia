@@ -1,0 +1,114 @@
+{
+  "name": "00 - Orquestador Principal (cada 6h)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "expression": "6"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron - Cada 6h",
+      "type": "n8n-nodes-base.schedule",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FILATELIA_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev' }}/query",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"sql\": \"SELECT id, nameEs, nameEn, wnsNumber, scottNumber, countryCode, year FROM Stamp WHERE isVerified = 0 OR isVerified IS FALSE OR descriptionEs IS NULL LIMIT 50\"\n}"
+      },
+      "id": "d1-query",
+      "name": "Cloudflare D1 - Get Unverified Stamps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "={{ $json.results ? $json.results.length : 0 }}",
+            "operator": "greaterThan",
+            "rightValue": 0
+          }
+        }
+      },
+      "id": "if-has-stamps",
+      "name": "IF - Hay sellos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "command": "node scrapers/04-ai-enricher.mjs --limit=50"
+      },
+      "id": "execute-ai-enricher",
+      "name": "Execute Command - Run AI Enricher",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [600, 0]
+    }
+  ],
+  "connections": {
+    "Cron - Cada 6h": {
+      "main": [
+        [
+          {
+            "node": "Cloudflare D1 - Get Unverified Stamps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cloudflare D1 - Get Unverified Stamps": {
+      "main": [
+        [
+          {
+            "node": "IF - Hay sellos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Hay sellos?": {
+      "main": [
+        [
+          {
+            "node": "Execute Command - Run AI Enricher",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["filatelia", "orquestador", "stamps", "d1"]
+}

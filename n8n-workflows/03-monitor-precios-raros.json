@@ -1,0 +1,85 @@
+{
+  "name": "03 - Monitor de Precios Raros (cada 12h)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "expression": "12"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Cron - Cada 12h",
+      "type": "n8n-nodes-base.schedule",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FILATELIA_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev' }}/query",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"sql\": \"SELECT id, nameEs, countryCode, rarityScore FROM Stamp WHERE rarityScore >= 7.0 OR isRare = 1 ORDER BY rarityScore DESC LIMIT 50\"\n}"
+      },
+      "id": "d1-query-rare",
+      "name": "Cloudflare D1 - Get High Rarity Stamps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "command": "node scrapers/02-stealth-scraper.mjs --limit=50 --rareOnly=true"
+      },
+      "id": "execute-stealth-scraper",
+      "name": "Execute Command - Run Stealth Scraper",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [400, 0]
+    }
+  ],
+  "connections": {
+    "Cron - Cada 12h": {
+      "main": [
+        [
+          {
+            "node": "Cloudflare D1 - Get High Rarity Stamps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cloudflare D1 - Get High Rarity Stamps": {
+      "main": [
+        [
+          {
+            "node": "Execute Command - Run Stealth Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["filatelia", "precios", "monitor", "raros", "stealth-scraper"]
+}

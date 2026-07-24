@@ -1,0 +1,7 @@
+nombre del peroducto
+descripcion del producto
+descripcion corta
+categoria
+precio
+imagen principal
+galeria de imagenes

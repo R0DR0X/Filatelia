@@ -1,0 +1,36 @@
+name = "filatelia-api"
+main = "src/index.ts"
+compatibility_date = "2024-04-03"
+
+[vars]
+SUPABASE_URL = "https://tshatwvvkworsogjfjyj.supabase.co"
+JWT_SECRET = "fp-secret-2024-filatelia-peruana-secure"
+
+# Cloudflare D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "filatelia-db"
+database_id = "a06f77b8-6826-4594-8bee-48018e637e01"
+
+# Cloudflare Vectorize Index binding
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "stamps-index"
+
+# Cloudflare Workers AI binding
+[ai]
+binding = "AI"
+
+
+# Bindings for R2 Buckets (Images, Thumbs, Backs)
+[[r2_buckets]]
+binding = "STAMPS_IMAGES"
+bucket_name = "stamps-images"
+
+[[r2_buckets]]
+binding = "STAMPS_THUMBS"
+bucket_name = "stamps-thumbs"
+
+[[r2_buckets]]
+binding = "STAMPS_BACKS"
+bucket_name = "stamps-backs"

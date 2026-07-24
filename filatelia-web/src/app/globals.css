@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@theme {
+  --color-moss-green: #556B2F;
+  --color-moss-green-light: #6B8E23;
+  --color-moss-green-dark: #3E4D22;
+  
+  --color-background: #050505;
+  --color-foreground: #ededed;
+  
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "Inter", sans-serif;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 2%;
+    --foreground: 0 0% 93%;
+    --primary: 75 41% 30%;
+    --border: 0 0% 15%;
+    --radius: 0.5rem;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif font-bold tracking-tight;
+  }
+}
+
+/* Custom Styles for Filatelia */
+
+.catalog-header-box {
+  background-color: var(--color-moss-green);
+  color: white;
+  padding: 1rem;
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+  border-bottom: 2px solid var(--color-moss-green-dark);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.stamp-card {
+  background-color: #121212;
+  border: 1px solid #1a1a1a;
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.stamp-card:hover {
+  border-color: rgba(85, 107, 47, 0.5);
+  box-shadow: 0 10px 15px -3px rgba(85, 107, 47, 0.1);
+  transform: translateY(-4px);
+}
+
+.glass-panel {
+  background-color: rgba(18, 18, 18, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+@keyframes slow-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.1);
+  }
+}
+
+.animate-slow-zoom {
+  animation: slow-zoom 20s ease-in-out infinite alternate;
+}
+
+/* Scrollbar personalizada */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #222;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #333;
+}

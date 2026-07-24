@@ -1,0 +1,12 @@
+{
+  "name": "Filatelia N8N Workflow Bundle",
+  "version": "4.0",
+  "description": "Complete workflow roster for automated scrapers, AI catalog enrichment, price monitoring, and health alerts.",
+  "workflows": [
+    "n8n-workflows/00-orquestador-principal.json",
+    "n8n-workflows/01-enriquecedor-nocturno.json",
+    "n8n-workflows/02-detector-duplicados.json",
+    "n8n-workflows/03-monitor-precios-raros.json",
+    "n8n-workflows/04-health-alert-monitor.json"
+  ]
+}

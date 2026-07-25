@@ -986,9 +986,9 @@ app.post('/import-stamp', async (c) => {
               countryCode, year, issueDate, denomination, currency,
               nameEs, nameEn, descriptionEs, descriptionEn,
               theme, tags, color, perforation, printTechnique, paperType,
-              imageUrl, imageThumbUrl, groupId, countryId, source, sourceUrl,
+              imageUrl, imageThumbUrl, imageBackUrl, groupId, countryId, source, sourceUrl,
               isVerified, isRare
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
             ON CONFLICT(sourceUrl) DO UPDATE SET
               scottNumber   = COALESCE(excluded.scottNumber, scottNumber),
               michelNumber  = COALESCE(excluded.michelNumber, michelNumber),
@@ -1008,6 +1008,7 @@ app.post('/import-stamp', async (c) => {
               paperType     = COALESCE(excluded.paperType, paperType),
               imageUrl      = CASE WHEN excluded.imageUrl LIKE '%none_logged_image%' THEN imageUrl ELSE COALESCE(excluded.imageUrl, imageUrl) END,
               imageThumbUrl = CASE WHEN excluded.imageThumbUrl LIKE '%none_logged_image%' THEN imageThumbUrl ELSE COALESCE(excluded.imageThumbUrl, imageThumbUrl) END,
+              imageBackUrl  = CASE WHEN excluded.imageBackUrl LIKE '%none_logged_image%' THEN imageBackUrl ELSE COALESCE(excluded.imageBackUrl, imageBackUrl) END,
               updatedAt     = datetime('now')
           `).bind(
             stampId, stamp.scottNumber || null,
@@ -1018,7 +1019,7 @@ app.post('/import-stamp', async (c) => {
             stamp.descriptionEs || null, stamp.descriptionEn || null,
             stamp.theme || null, tags, stamp.color || null,
             stamp.perforation || null, stamp.printTechnique || null, stamp.paperType || null,
-            stamp.imageUrl || null, stamp.imageThumbUrl || null,
+            stamp.imageUrl || null, stamp.imageThumbUrl || null, stamp.imageBackUrl || null,
             groupId, stamp._countryId,
             stamp.source || 'scraper', stamp.sourceUrl || null
           ).run();

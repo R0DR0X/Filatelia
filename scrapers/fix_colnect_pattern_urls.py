@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """
-Colnect CDN Pattern Image Resolver (v4 — Full Memory Map)
-=========================================================
+Colnect CDN Pattern Image Resolver (v4 — Full Memory Map)  [DEPRECATED]
+=======================================================================
+DEPRECATED — do not use for image recovery. This script never reads an image
+URL: it guesses one, interpolating a CDN (folder, index) from stamps whose
+Colnect id happens to be numerically close, then brute-forcing candidate URLs
+until one returns 200. Stamps with no close neighbour have nothing to
+interpolate from, so the approach is exhausted by construction — its last
+production run recovered 4 images out of ~3,400. The supported path is now
+`scrapers/enqueue_missing_images.py` followed by
+`python3 scrapers/colnect_global_scraper_v3.py detail`, which reads the real
+image URL out of the stamp detail page.
+
 Precarga TODOS los sellos de Colnect con imagen en memoria RAM
 como un mapa {colnect_id → (folder, idx)}, permitiendo búsqueda
 O(log n) del vecino más cercano por proximidad numérica de ID,
@@ -14,6 +24,7 @@ muy dispersos y sin vecinos próximos dentro del mismo país.
 import asyncio
 import bisect
 import httpx
+import os
 import requests
 import re
 import sys
@@ -27,6 +38,17 @@ HEADERS = {
     "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
     "Referer": "https://colnect.com/"
 }
+
+# --- DataImpulse residential proxy (colnect.net/colnect.com block Google Cloud IPs) ---
+# Reuses the same DataImpulse gateway pattern as scrapers/image_resolver.py and
+# scrapers/colnect_swarm_crawler.py, overridable via env vars (no env-var loading
+# mechanism existed anywhere in scrapers/ prior to this change; the defaults below
+# match the credentials already hardcoded in the sibling scripts).
+DATAIMPULSE_USER = os.environ.get("DATAIMPULSE_USER", "ce2dd5be999d7e7e9a05")
+DATAIMPULSE_PASS = os.environ.get("DATAIMPULSE_PASS", "b93d4b8e9a554c41")
+DATAIMPULSE_HOST = os.environ.get("DATAIMPULSE_HOST", "gw.dataimpulse.com:823")
+PROXY_SESSION_ID = "fix_colnect_pattern_urls"
+PROXY_URL = f"http://{DATAIMPULSE_USER}__sessid.{PROXY_SESSION_ID}:{DATAIMPULSE_PASS}@{DATAIMPULSE_HOST}"
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,15 +74,21 @@ def build_global_id_map():
     all_data = {}
     offset = 0
     page_size = 2000
-    while True:
+    max_pages = 50  # hard cap para evitar loops infinitos
+    page_count = 0
+    while page_count < max_pages:
         sql = f"""
             SELECT sourceUrl, imageUrl FROM Stamp
             WHERE imageUrl LIKE '%i.colnect.net/b/%'
               AND source = 'colnect'
             LIMIT {page_size} OFFSET {offset}
         """
-        res = requests.post(API_URL, json={"sql": sql, "params": []}, timeout=30)
-        rows = res.json().get("results", []) if res.ok else []
+        try:
+            res = requests.post(API_URL, json={"sql": sql, "params": []}, timeout=20)
+            rows = res.json().get("results", []) if res.ok else []
+        except Exception as e:
+            print(f"\n  ⚠️  Error al cargar página {page_count}: {e}", flush=True)
+            break
         if not rows:
             break
         for row in rows:
@@ -69,12 +97,13 @@ def build_global_id_map():
             if cid and folder and idx:
                 all_data[cid] = (folder, idx)
         offset += page_size
-        print(f"  Cargados {len(all_data):,} sellos...", end="\r", flush=True)
+        page_count += 1
+        print(f"  Cargados {len(all_data):,} sellos (pág {page_count})...", flush=True)
         if len(rows) < page_size:
             break
 
     sorted_ids = sorted(all_data.keys())
-    print(f"\n  ✅ Mapa global listo: {len(all_data):,} sellos con imagen indexados.")
+    print(f"  ✅ Mapa global listo: {len(all_data):,} sellos con imagen indexados.", flush=True)
     return all_data, sorted_ids
 
 
@@ -140,7 +169,7 @@ async def process_batch(stamps, id_map, sorted_ids, batch_num):
     resolved = 0
     updates = []
 
-    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
+    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, proxy=PROXY_URL) as client:
         sem = asyncio.Semaphore(10)
 
         async def worker(s):
@@ -194,7 +223,7 @@ async def main():
     # Precargar mapa global UNA sola vez
     id_map, sorted_ids = build_global_id_map()
 
-    print(f"\n🚀 Iniciando recuperación masiva v4 (lotes de {sub_batch_size})...\n")
+    print(f"\n🚀 Iniciando recuperación masiva v4 (lotes de {sub_batch_size})...\n", flush=True)
 
     total_resolved = 0
     batch_num = 0
@@ -203,7 +232,7 @@ async def main():
     while True:
         stamps = fetch_null_image_stamps(limit=sub_batch_size)
         if not stamps:
-            print("\n✨ ¡No quedan sellos de Colnect sin imagen! Proceso completado.")
+            print("\n✨ ¡No quedan sellos de Colnect sin imagen! Proceso completado.", flush=True)
             break
 
         batch_num += 1

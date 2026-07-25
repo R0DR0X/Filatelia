@@ -53,3 +53,9 @@ web/*.ai
 web/*.AI
 web/*.xlsx
 web/*.XLSX
+
+# Scraper runtime artifacts
+local_scraper*.out
+colnect_v3_progress.db
+colnect_v3_progress.db-*
+colnect_v3.log

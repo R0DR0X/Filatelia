@@ -788,12 +788,48 @@ app.get('/r2/:bucket/:key{.+}', async (c) => {
 // Used by local scrapers to insert/upsert stamps into D1
 // Accepts up to 10 stamps per call to stay within Worker CPU limits.
 // ==========================================
+// This endpoint is unauthenticated, so the country block of a payload is fully
+// attacker-controlled. `Country.code` is UNIQUE and `/stamp/:id` joins Country
+// on `code`, so accepting a caller-supplied row id would let anyone squat a
+// real ISO code and rename every stamp of that country. The row id is therefore
+// always derived server-side from a strictly validated code, and any payload
+// that disagrees with the derived id is treated as untrusted.
+const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
+const COUNTRY_NAME_MAX_LENGTH = 100;
+
+function validateCountryPayload(
+  stamp: any
+): { id: string; code: string; nameEs: string; nameEn: string } | null {
+  const code = typeof stamp.countryCode === 'string' ? stamp.countryCode.trim() : '';
+  if (!COUNTRY_CODE_PATTERN.test(code)) return null;
+
+  const derivedId = `country-${code.toLowerCase()}`;
+  const claimedId = typeof stamp.countryId === 'string' ? stamp.countryId.trim() : '';
+  // Present but different: reject the country block instead of silently fixing it.
+  if (claimedId && claimedId !== derivedId) return null;
+
+  const nameEn = typeof stamp.countryNameEn === 'string' ? stamp.countryNameEn.trim() : '';
+  const nameEs = typeof stamp.countryNameEs === 'string' ? stamp.countryNameEs.trim() : '';
+  if (!nameEn || !nameEs) return null;
+  if (nameEn.length > COUNTRY_NAME_MAX_LENGTH || nameEs.length > COUNTRY_NAME_MAX_LENGTH) return null;
+
+  return { id: derivedId, code, nameEs, nameEn };
+}
+
 app.post('/import-stamp', async (c) => {
   try {
     const body = await c.req.json();
     const stamps: any[] = Array.isArray(body) ? body : body.stamps || [body];
 
-    const results = { inserted: 0, updated: 0, skipped: 0, errors: [] as string[] };
+    // `errors` stays as-is for backward compatibility; `failedIds` lets callers
+    // retry only the stamps that actually failed instead of the whole batch.
+    const results = {
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as string[],
+      failedIds: [] as string[],
+    };
 
     // Determine catalog strategy:
     // - If stamp.catalogId is explicitly provided, use it (caller guarantees it exists)
@@ -807,6 +843,9 @@ app.post('/import-stamp', async (c) => {
     // Collect unique groups to batch-create
     const groupsToCreate: Map<string, any> = new Map();
     const neededCatalogIds: Set<string> = new Set();
+    // Countries referenced by the incoming stamps. Stamp.countryId is a FK to
+    // Country.id, so the row must exist before the stamps are upserted.
+    const countriesToCreate: Map<string, any> = new Map();
 
     for (const stamp of stamps) {
       const source = stamp.source || 'scraper';
@@ -817,6 +856,15 @@ app.post('/import-stamp', async (c) => {
       stamp._catalogId  = catalogId;
       stamp._catalogName = stamp.catalogName || defaultCat.name;
       neededCatalogIds.add(catalogId);
+
+      // Only create a Country when the payload passes server-side validation.
+      // A rejected country block never drops the stamp: it is imported with
+      // countryId = NULL so the FK can never dangle.
+      const country = validateCountryPayload(stamp);
+      stamp._countryId = country ? country.id : null;
+      if (country && !countriesToCreate.has(country.id)) {
+        countriesToCreate.set(country.id, country);
+      }
 
       // Stable groupId: country + year (no Date.now())
       const groupId = stamp.groupId || `group-${(stamp.countryCode || 'xx').toLowerCase()}-${stamp.year || 'unknown'}`;
@@ -847,6 +895,15 @@ app.post('/import-stamp', async (c) => {
       }
     }
 
+    // Countries first: Stamp.countryId is a FK to Country.id.
+    // `code` is UNIQUE — INSERT OR IGNORE is the desired conflict behavior.
+    for (const country of countriesToCreate.values()) {
+      batchStmts.push(
+        c.env.DB.prepare(`INSERT OR IGNORE INTO Country (id, code, nameEs, nameEn) VALUES (?, ?, ?, ?)`)
+          .bind(country.id, country.code, country.nameEs, country.nameEn)
+      );
+    }
+
     for (const grp of groupsToCreate.values()) {
       batchStmts.push(
         c.env.DB.prepare(`INSERT OR IGNORE INTO StampGroup (id, catalogId, titleEs, titleEn, year, "order") VALUES (?, ?, ?, ?, ?, 0)`)
@@ -857,9 +914,10 @@ app.post('/import-stamp', async (c) => {
 
     // Now upsert each stamp
     for (const stamp of stamps) {
+      // Declared outside the try so a failure can still be reported per stamp.
+      let stampId: string = typeof stamp.id === 'string' ? stamp.id : '';
       try {
         const tags = Array.isArray(stamp.tags) ? stamp.tags.join(',') : (stamp.tags || null);
-        let stampId = stamp.id;
         if (!stampId) {
           if (stamp.sourceUrl) {
             stampId = await generateUUIDv5('12345678-1234-5678-1234-567812345678', stamp.sourceUrl);
@@ -916,7 +974,7 @@ app.post('/import-stamp', async (c) => {
             stamp.designer || null, stamp.printer || null, stamp.engraver || null,
             stamp.imageUrl || null, stamp.imageThumbUrl || null, stamp.imageBackUrl || null,
             stamp.marketPriceUsd || null, stamp.conditionMintUsd || null, stamp.conditionUsedUsd || null,
-            groupId, stamp.countryId || null,
+            groupId, stamp._countryId,
             stamp.source || 'scraper', stamp.sourceUrl || null
           ).run();
           // D1 doesn't expose changes_made easily; count as inserted (ON CONFLICT handles updates)
@@ -961,13 +1019,14 @@ app.post('/import-stamp', async (c) => {
             stamp.theme || null, tags, stamp.color || null,
             stamp.perforation || null, stamp.printTechnique || null, stamp.paperType || null,
             stamp.imageUrl || null, stamp.imageThumbUrl || null,
-            groupId, stamp.countryId || null,
+            groupId, stamp._countryId,
             stamp.source || 'scraper', stamp.sourceUrl || null
           ).run();
           results.inserted++;
         }
       } catch (e: any) {
         results.errors.push(`${stamp.wnsNumber || stamp.nameEn}: ${e.message}`);
+        results.failedIds.push(stampId || stamp.sourceUrl || stamp.wnsNumber || '');
       }
     }
 

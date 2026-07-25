@@ -33,6 +33,7 @@ from playwright.async_api import async_playwright
 SCRIPT_DIR   = Path(__file__).parent
 COOKIES_FILE = SCRIPT_DIR / "colnect_cookies.json"
 COUNTRIES_FILE = SCRIPT_DIR / "colnect_countries_full.json"
+ISO_MAP_FILE = SCRIPT_DIR / "colnect_iso_map.json"
 PROGRESS_DB  = Path("colnect_v3_progress.db")   # SQLite checkpoint (project root)
 LOG_FILE     = Path("colnect_v3.log")
 
@@ -49,6 +50,7 @@ PROXY_PASS   = "b93d4b8e9a554c41"
 LISTING_WORKERS  = 4   # parallel listing-page workers
 DETAIL_WORKERS   = 3   # parallel detail-page workers
 BATCH_SIZE       = 20  # stamps per D1 API call
+MAX_LOGGED_BATCH_ERRORS = 5  # cap per-batch error lines so logs stay readable
 LISTING_DELAY    = (2.0, 4.0)  # (min, max) seconds between listing pages
 DETAIL_DELAY     = (3.0, 5.5)  # (min, max) seconds between detail pages
 
@@ -60,20 +62,53 @@ NONE_LOGGED_PATTERNS = [
 # ── UUID namespace ───────────────────────────────────────────────────────────
 NAMESPACE_PHILATELY = uuid.UUID("12345678-1234-5678-1234-567812345678")
 
-# ── Country code map ────────────────────────────────────────────────────────
-COUNTRY_CODE_MAP = {
-    "225": "UNI",  "90": "GUI",   "191": "SIE",  "41": "CAR",
-    "212": "TOG",  "91": "GUI",   "98": "HUN",   "939": "FRA",
-    "108": "JAP",  "74": "FRA",   "177": "ROM",  "121": "LIB",
-    "59":  "DJI",  "156": "NIG",  "21": "BEL",   "81": "GER",
-    "442": "CHI",  "178": "RUS",  "106": "ITA",  "199": "SPA",
-    "53":  "CUB",  "13": "AUS",   "224": "GBR",  "38": "CAN",
-    "30":  "BRA",  "157": "NIG",  "155": "NZL",  "169": "PE",
-    "10":  "ARG",  "105": "ISR",  "139": "MEX",  "47": "COL",
-    "43":  "CHI",  "227": "URU",  "230": "VEN",  "26": "BOL",
-    "63":  "ECU",  "168": "PAR",  "248": "ABK",  "456": "ABU",
-    "133": "MAR",  "176": "POR",  "52": "CRO",   "237": "YUG",
-}
+# ── Country ISO map ─────────────────────────────────────────────────────────
+# Generated offline by scrapers/generate_colnect_iso_map.py (pycountry is a
+# build-time dependency only — it is never imported at runtime).
+# Shape: {"<colnect_id>": {"iso2": "US"|None, "nameEn": str, "nameEs": str}}
+COUNTRY_ISO_MAP = {}
+
+
+def load_iso_map():
+    """Load the Colnect id -> ISO2 map. Missing/broken file is fatal."""
+    if not ISO_MAP_FILE.exists():
+        raise SystemExit(
+            f"FATAL: {ISO_MAP_FILE} no existe. Genéralo con "
+            f"`python3 scrapers/generate_colnect_iso_map.py` antes de scrapear. "
+            f"Sin este mapa los countryCode/countryId serían inválidos y D1 "
+            f"rechazaría el 100% de los sellos."
+        )
+    try:
+        with open(ISO_MAP_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        raise SystemExit(f"FATAL: no se pudo leer {ISO_MAP_FILE}: {e}")
+    if not isinstance(data, dict) or not data:
+        raise SystemExit(f"FATAL: {ISO_MAP_FILE} está vacío o malformado.")
+    return data
+
+
+def country_meta(country_id):
+    """Return (iso2, nameEn, nameEs) for a Colnect numeric country id.
+
+    iso2 is None when the entity has no ISO 3166-1 code (historical states,
+    colonies, occupations, cinderella/revenue/illegal issues...). Never
+    fabricate a code: an unknown country is better than a wrong one.
+    """
+    entry = COUNTRY_ISO_MAP.get(str(country_id or "")) or {}
+    iso2 = entry.get("iso2") or None
+    return iso2, entry.get("nameEn"), entry.get("nameEs")
+
+
+def country_payload_fields(country_id):
+    """Build the country-related fields sent to the import API."""
+    iso2, name_en, name_es = country_meta(country_id)
+    return {
+        "countryCode": iso2,
+        "countryId": f"country-{iso2.lower()}" if iso2 else None,
+        "countryNameEn": name_en if iso2 else None,
+        "countryNameEs": name_es if iso2 else None,
+    }
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -91,6 +126,8 @@ logging.basicConfig(
     ],
 )
 log = logging.getLogger(__name__)
+
+COUNTRY_ISO_MAP = load_iso_map()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -165,8 +202,10 @@ def enqueue_stamps(stamps_basic):
             "VALUES (?,?,?,?,'pending',?)",
             (
                 s["sourceUrl"],
-                s.get("countryId", ""),
-                s.get("countryCode", ""),
+                # country_id holds the Colnect numeric id (needed to rebuild
+                # listing URLs); country_code holds the ISO2 (may be empty).
+                s.get("colnectCountryId", ""),
+                s.get("countryCode") or "",
                 json.dumps(s, ensure_ascii=False),
                 int(time.time()),
             )
@@ -240,7 +279,8 @@ def seed_country_base_urls(countries):
     for c in countries:
         cid   = str(c["id"])
         cslug = c["name"]
-        ccode = COUNTRY_CODE_MAP.get(cid, cslug[:3].upper())
+        # ISO2 from the generated map, or empty when the entity has no ISO code.
+        ccode = country_meta(cid)[0] or ""
         base  = f"https://colnect.com/en/stamps/list/country/{cid}-{cslug}"
         conn.execute(
             "INSERT OR IGNORE INTO listing_pages (url, country_id, country_code, updated_at) VALUES (?,?,?,?)",
@@ -346,8 +386,10 @@ def parse_listing_page(html, country_id, country_code):
                 "id":           stamp_id,
                 "nameEn":       name,
                 "nameEs":       name,
-                "countryCode":  country_code,
-                "countryId":    country_id,
+                # Colnect numeric id: kept for checkpoint bookkeeping and URL
+                # building only — it is NOT a valid D1 Country.id.
+                "colnectCountryId": str(country_id or ""),
+                **country_payload_fields(country_id),
                 "year":         year,
                 "denomination": denomination,
                 "imageUrl":     image_url,
@@ -367,7 +409,21 @@ def parse_listing_page(html, country_id, country_code):
     return stamps, list(set(discovered_urls))
 
 
-def parse_detail_page(html, source_url, basic_data):
+def _resolve_colnect_country_id(basic_data, country_id=None):
+    """Recover the Colnect numeric country id from any checkpoint generation.
+
+    Rows queued before the ISO fix stored the numeric id under "countryId";
+    newer rows use "colnectCountryId". Resolving here (instead of trusting the
+    stored country_code) upgrades legacy rows at send time without a migration.
+    """
+    for candidate in (country_id, basic_data.get("colnectCountryId"), basic_data.get("countryId")):
+        candidate = str(candidate or "")
+        if candidate.isdigit():
+            return candidate
+    return ""
+
+
+def parse_detail_page(html, source_url, basic_data, country_id=None):
     """Parse an individual stamp detail page."""
     soup = BeautifulSoup(html, "html.parser")
     info = {}
@@ -412,12 +468,14 @@ def parse_detail_page(html, source_url, basic_data):
         if ym:
             year = int(ym.group(1))
 
+    colnect_country_id = _resolve_colnect_country_id(basic_data, country_id)
+
     return {
         "id":             basic_data.get("id") or str(uuid.uuid5(NAMESPACE_PHILATELY, source_url)),
         "source":         "colnect",
         "sourceUrl":      source_url,
-        "countryCode":    basic_data.get("countryCode", ""),
-        "countryId":      basic_data.get("countryId", ""),
+        "colnectCountryId": colnect_country_id,
+        **country_payload_fields(colnect_country_id),
         "nameEn":         name,
         "nameEs":         name,
         "year":           year,
@@ -442,9 +500,35 @@ def parse_detail_page(html, source_url, basic_data):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def send_batch_sync(stamps):
-    """Send a batch of stamps to Cloudflare D1."""
+    """Send a batch of stamps to Cloudflare D1.
+
+    Returns the set of sourceUrls that were NOT persisted; an empty set means
+    the whole batch was accepted. The worker imports each stamp independently,
+    so a single bad stamp must not force its 19 healthy siblings into retry.
+
+    Total failures (transport error, non-200 after retries, nothing persisted,
+    or a response whose `failedIds` is missing/unusable — e.g. an older worker
+    still deployed) report every stamp in the batch as failed.
+    """
     if not stamps:
-        return True
+        return set()
+
+    all_urls = {s.get("sourceUrl") for s in stamps if s.get("sourceUrl")}
+    url_by_id = {s.get("id"): s.get("sourceUrl") for s in stamps if s.get("id")}
+
+    def resolve_failed(failed_ids):
+        """Map the worker's failedIds back to sourceUrls; None if unusable."""
+        if not isinstance(failed_ids, list) or not failed_ids:
+            return None
+        resolved = set()
+        for fid in failed_ids:
+            url = url_by_id.get(fid)
+            if url is None:
+                # Unknown id: cannot prove which stamps persisted, be conservative.
+                return None
+            resolved.add(url)
+        return resolved
+
     for attempt in range(4):
         try:
             res = requests.post(
@@ -455,10 +539,44 @@ def send_batch_sync(stamps):
             )
             if res.status_code == 200:
                 result = res.json()
-                ins = result.get("inserted", 0)
-                upd = result.get("updated", 0)
-                log.info(f"  📦 D1: +{ins} insertados, {upd} actualizados ({len(stamps)} enviados)")
-                return True
+                ins  = result.get("inserted", 0)
+                upd  = result.get("updated", 0)
+                skip = result.get("skipped", 0)
+                errors = result.get("errors") or []
+
+                # The endpoint returns HTTP 200 + success:true even when every
+                # stamp was rejected. Never report that as a success.
+                if errors:
+                    shown = errors[:MAX_LOGGED_BATCH_ERRORS]
+                    for msg in shown:
+                        log.warning(f"  ⚠️ D1 rechazó un sello: {msg}")
+                    if len(errors) > len(shown):
+                        log.warning(f"  ⚠️ ...y {len(errors) - len(shown)} errores más ocultos.")
+                    log.warning(
+                        f"  ❌ D1: {len(errors)}/{len(stamps)} sellos rechazados "
+                        f"(+{ins} insertados, {upd} actualizados, {skip} omitidos)"
+                    )
+                    failed_urls = resolve_failed(result.get("failedIds"))
+                    if failed_urls is None:
+                        log.warning(
+                            "  ⚠️ Respuesta sin failedIds utilizable — "
+                            "se reintenta el lote completo."
+                        )
+                        return set(all_urls)
+                    return failed_urls
+
+                if ins == 0 and upd == 0:
+                    log.warning(
+                        f"  ❌ D1: 0 insertados y 0 actualizados de {len(stamps)} enviados "
+                        f"({skip} omitidos) — lote no persistido."
+                    )
+                    return set(all_urls)
+
+                log.info(
+                    f"  📦 D1: +{ins} insertados, {upd} actualizados, {skip} omitidos "
+                    f"({len(stamps)} enviados)"
+                )
+                return set()
             if res.status_code == 429:
                 wait = 10 * (attempt + 1)
                 log.warning(f"  ⚠️ D1 rate-limit 429. Esperando {wait}s...")
@@ -468,7 +586,7 @@ def send_batch_sync(stamps):
         except Exception as e:
             log.warning(f"  ⚠️ D1 excepción (intento {attempt+1}): {e}")
         time.sleep(3 * (attempt + 1))
-    return False
+    return set(all_urls)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -664,7 +782,7 @@ async def detail_worker(worker_id, queue, playwright, result_lock, counters, bat
                     queue.task_done()
                     continue
 
-                stamp = parse_detail_page(html, source_url, basic_data)
+                stamp = parse_detail_page(html, source_url, basic_data, item.get("country_id"))
                 if not stamp:
                     increment_stamp_retry(source_url)
                     queue.task_done()
@@ -680,9 +798,15 @@ async def detail_worker(worker_id, queue, playwright, result_lock, counters, bat
                         to_send = batch_buffer.copy()
                         batch_buffer.clear()
                         loop = asyncio.get_running_loop()
-                        await loop.run_in_executor(None, send_batch_sync, to_send)
+                        failed = await loop.run_in_executor(None, send_batch_sync, to_send)
                         for s in to_send:
-                            mark_stamp(s["sourceUrl"], "done")
+                            # Only retire a stamp once D1 actually accepted it,
+                            # otherwise it would be lost silently. Failure is
+                            # per stamp: one bad sello no reintenta el lote.
+                            if s.get("sourceUrl") in failed:
+                                increment_stamp_retry(s["sourceUrl"])
+                            else:
+                                mark_stamp(s["sourceUrl"], "done")
 
             except Exception as e:
                 log.warning(f"  ❌ [{worker_id}] Error detalle {source_url}: {e}")
@@ -761,9 +885,12 @@ async def run_detail_phase():
             await asyncio.gather(*workers, return_exceptions=True)
 
     if batch_buffer:
-        send_batch_sync(batch_buffer)
+        failed = send_batch_sync(batch_buffer)
         for s in batch_buffer:
-            mark_stamp(s["sourceUrl"], "done")
+            if s.get("sourceUrl") in failed:
+                increment_stamp_retry(s["sourceUrl"])
+            else:
+                mark_stamp(s["sourceUrl"], "done")
 
     log.info(f"✅ Fase 2 completa. Detalles extraídos: {counters['detail_done']:,}")
 

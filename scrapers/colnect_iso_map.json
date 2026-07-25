@@ -1,0 +1,2117 @@
+{
+  "1": {
+    "iso2": "AF",
+    "nameEn": "Afghanistan",
+    "nameEs": "Afghanistan"
+  },
+  "10": {
+    "iso2": "AR",
+    "nameEn": "Argentina",
+    "nameEs": "Argentina"
+  },
+  "101": {
+    "iso2": "ID",
+    "nameEn": "Indonesia",
+    "nameEs": "Indonesia"
+  },
+  "102": {
+    "iso2": "IR",
+    "nameEn": "Iran",
+    "nameEs": "Iran"
+  },
+  "103": {
+    "iso2": "IQ",
+    "nameEn": "Iraq",
+    "nameEs": "Iraq"
+  },
+  "104": {
+    "iso2": "IE",
+    "nameEn": "Ireland",
+    "nameEs": "Ireland"
+  },
+  "105": {
+    "iso2": "IL",
+    "nameEn": "Israel",
+    "nameEs": "Israel"
+  },
+  "106": {
+    "iso2": "IT",
+    "nameEn": "Italy",
+    "nameEs": "Italy"
+  },
+  "1065": {
+    "iso2": null,
+    "nameEn": "Grenadines of St. Vincent, Bequia",
+    "nameEs": "Grenadines of St. Vincent, Bequia"
+  },
+  "1066": {
+    "iso2": null,
+    "nameEn": "Grenadines of St. Vincent, Canouan",
+    "nameEs": "Grenadines of St. Vincent, Canouan"
+  },
+  "1069": {
+    "iso2": null,
+    "nameEn": "Grenadines of St. Vincent, Mayreau",
+    "nameEs": "Grenadines of St. Vincent, Mayreau"
+  },
+  "107": {
+    "iso2": "JM",
+    "nameEn": "Jamaica",
+    "nameEs": "Jamaica"
+  },
+  "1070": {
+    "iso2": null,
+    "nameEn": "Grenadines of St. Vincent, Mustique",
+    "nameEs": "Grenadines of St. Vincent, Mustique"
+  },
+  "1075": {
+    "iso2": null,
+    "nameEn": "Grenadines of St. Vincent, Union Island",
+    "nameEs": "Grenadines of St. Vincent, Union Island"
+  },
+  "1076": {
+    "iso2": null,
+    "nameEn": "Germany, Allied Occupation of Berlin",
+    "nameEs": "Germany, Allied Occupation of Berlin"
+  },
+  "108": {
+    "iso2": "JP",
+    "nameEn": "Japan",
+    "nameEs": "Japan"
+  },
+  "109": {
+    "iso2": "JO",
+    "nameEn": "Jordan",
+    "nameEs": "Jordan"
+  },
+  "11": {
+    "iso2": "AM",
+    "nameEn": "Armenia",
+    "nameEs": "Armenia"
+  },
+  "110": {
+    "iso2": "KZ",
+    "nameEn": "Kazakhstan",
+    "nameEs": "Kazakhstan"
+  },
+  "111": {
+    "iso2": "KE",
+    "nameEn": "Kenya",
+    "nameEs": "Kenya"
+  },
+  "1111": {
+    "iso2": null,
+    "nameEn": "Romania - Oradea",
+    "nameEs": "Romania - Oradea"
+  },
+  "112": {
+    "iso2": "KI",
+    "nameEn": "Kiribati",
+    "nameEs": "Kiribati"
+  },
+  "113": {
+    "iso2": "KP",
+    "nameEn": "Korea, North",
+    "nameEs": "Korea, North"
+  },
+  "1135": {
+    "iso2": null,
+    "nameEn": "Switzerland: Revenue Stamps",
+    "nameEs": "Switzerland: Revenue Stamps"
+  },
+  "1136": {
+    "iso2": null,
+    "nameEn": "Italy: Revenue Stamps",
+    "nameEs": "Italy: Revenue Stamps"
+  },
+  "1137": {
+    "iso2": null,
+    "nameEn": "Pakistan: Revenue Stamps",
+    "nameEs": "Pakistan: Revenue Stamps"
+  },
+  "1138": {
+    "iso2": null,
+    "nameEn": "Russia: Revenue Stamps",
+    "nameEs": "Russia: Revenue Stamps"
+  },
+  "1139": {
+    "iso2": null,
+    "nameEn": "Austria: Revenue Stamps",
+    "nameEs": "Austria: Revenue Stamps"
+  },
+  "114": {
+    "iso2": "KR",
+    "nameEn": "Korea, South",
+    "nameEs": "Korea, South"
+  },
+  "1140": {
+    "iso2": null,
+    "nameEn": "Ecuador: Revenue Stamps",
+    "nameEs": "Ecuador: Revenue Stamps"
+  },
+  "115": {
+    "iso2": "KW",
+    "nameEn": "Kuwait",
+    "nameEs": "Kuwait"
+  },
+  "1155": {
+    "iso2": null,
+    "nameEn": "India: Revenue Stamps",
+    "nameEs": "India: Revenue Stamps"
+  },
+  "1156": {
+    "iso2": null,
+    "nameEn": "German Realm: Revenue Stamps",
+    "nameEs": "German Realm: Revenue Stamps"
+  },
+  "116": {
+    "iso2": "KG",
+    "nameEn": "Kyrgyzstan",
+    "nameEs": "Kyrgyzstan"
+  },
+  "117": {
+    "iso2": "LA",
+    "nameEn": "Laos",
+    "nameEs": "Laos"
+  },
+  "1179": {
+    "iso2": null,
+    "nameEn": "United Kingdom: Revenue Stamps",
+    "nameEs": "United Kingdom: Revenue Stamps"
+  },
+  "118": {
+    "iso2": "LV",
+    "nameEn": "Latvia",
+    "nameEs": "Latvia"
+  },
+  "119": {
+    "iso2": "LB",
+    "nameEn": "Lebanon",
+    "nameEs": "Lebanon"
+  },
+  "12": {
+    "iso2": "AW",
+    "nameEn": "Aruba",
+    "nameEs": "Aruba"
+  },
+  "120": {
+    "iso2": "LS",
+    "nameEn": "Lesotho",
+    "nameEs": "Lesotho"
+  },
+  "121": {
+    "iso2": "LR",
+    "nameEn": "Liberia",
+    "nameEs": "Liberia"
+  },
+  "122": {
+    "iso2": "LY",
+    "nameEn": "Libya",
+    "nameEs": "Libya"
+  },
+  "123": {
+    "iso2": "LI",
+    "nameEn": "Liechtenstein",
+    "nameEs": "Liechtenstein"
+  },
+  "1234": {
+    "iso2": null,
+    "nameEn": "Canada: Revenue Stamps",
+    "nameEs": "Canada: Revenue Stamps"
+  },
+  "124": {
+    "iso2": "LT",
+    "nameEn": "Lithuania",
+    "nameEs": "Lithuania"
+  },
+  "125": {
+    "iso2": "LU",
+    "nameEn": "Luxembourg",
+    "nameEs": "Luxembourg"
+  },
+  "1259": {
+    "iso2": null,
+    "nameEn": "Belgium: Revenue Stamps",
+    "nameEs": "Belgium: Revenue Stamps"
+  },
+  "126": {
+    "iso2": "MO",
+    "nameEn": "Macau",
+    "nameEs": "Macau"
+  },
+  "127": {
+    "iso2": "MK",
+    "nameEn": "North Macedonia",
+    "nameEs": "North Macedonia"
+  },
+  "128": {
+    "iso2": "MG",
+    "nameEn": "Madagascar",
+    "nameEs": "Madagascar"
+  },
+  "129": {
+    "iso2": "MW",
+    "nameEn": "Malawi",
+    "nameEs": "Malawi"
+  },
+  "13": {
+    "iso2": "AU",
+    "nameEn": "Australia",
+    "nameEs": "Australia"
+  },
+  "130": {
+    "iso2": "MY",
+    "nameEn": "Malaysia",
+    "nameEs": "Malaysia"
+  },
+  "131": {
+    "iso2": "MV",
+    "nameEn": "Maldives",
+    "nameEs": "Maldives"
+  },
+  "132": {
+    "iso2": "ML",
+    "nameEn": "Mali",
+    "nameEs": "Mali"
+  },
+  "133": {
+    "iso2": "MT",
+    "nameEn": "Malta",
+    "nameEs": "Malta"
+  },
+  "134": {
+    "iso2": "MH",
+    "nameEn": "Marshall Islands",
+    "nameEs": "Marshall Islands"
+  },
+  "136": {
+    "iso2": "MR",
+    "nameEn": "Mauritania",
+    "nameEs": "Mauritania"
+  },
+  "137": {
+    "iso2": "MU",
+    "nameEn": "Mauritius",
+    "nameEs": "Mauritius"
+  },
+  "1371": {
+    "iso2": null,
+    "nameEn": "Lebanon: Revenue Stamps",
+    "nameEs": "Lebanon: Revenue Stamps"
+  },
+  "1382": {
+    "iso2": null,
+    "nameEn": "Chad: Illegal Stamps",
+    "nameEs": "Chad: Illegal Stamps"
+  },
+  "139": {
+    "iso2": "MX",
+    "nameEn": "Mexico",
+    "nameEs": "Mexico"
+  },
+  "14": {
+    "iso2": "AT",
+    "nameEn": "Austria",
+    "nameEs": "Austria"
+  },
+  "140": {
+    "iso2": "FM",
+    "nameEn": "Micronesia, Federated States of",
+    "nameEs": "Micronesia, Federated States of"
+  },
+  "1405": {
+    "iso2": null,
+    "nameEn": "Syria: Revenue Stamps",
+    "nameEs": "Syria: Revenue Stamps"
+  },
+  "141": {
+    "iso2": "MD",
+    "nameEn": "Moldova",
+    "nameEs": "Moldova"
+  },
+  "142": {
+    "iso2": "MC",
+    "nameEn": "Monaco",
+    "nameEs": "Monaco"
+  },
+  "143": {
+    "iso2": "MN",
+    "nameEn": "Mongolia",
+    "nameEs": "Mongolia"
+  },
+  "144": {
+    "iso2": "MS",
+    "nameEn": "Montserrat",
+    "nameEs": "Montserrat"
+  },
+  "145": {
+    "iso2": "MA",
+    "nameEn": "Morocco",
+    "nameEs": "Morocco"
+  },
+  "146": {
+    "iso2": "MZ",
+    "nameEn": "Mozambique",
+    "nameEs": "Mozambique"
+  },
+  "1460": {
+    "iso2": null,
+    "nameEn": "Djibouti: Illegal Stamps",
+    "nameEs": "Djibouti: Illegal Stamps"
+  },
+  "1461": {
+    "iso2": null,
+    "nameEn": "Burkina Faso: Illegal Stamps",
+    "nameEs": "Burkina Faso: Illegal Stamps"
+  },
+  "1462": {
+    "iso2": "CG",
+    "nameEn": "Congo, Republic",
+    "nameEs": "Congo, Republic"
+  },
+  "1463": {
+    "iso2": null,
+    "nameEn": "Malawi: Illegal Stamps",
+    "nameEs": "Malawi: Illegal Stamps"
+  },
+  "1464": {
+    "iso2": null,
+    "nameEn": "Rwanda: Illegal Stamps",
+    "nameEs": "Rwanda: Illegal Stamps"
+  },
+  "1465": {
+    "iso2": null,
+    "nameEn": "Benin: Illegal Stamps",
+    "nameEs": "Benin: Illegal Stamps"
+  },
+  "1466": {
+    "iso2": null,
+    "nameEn": "Central African Republic: Illegal Stamps",
+    "nameEs": "Central African Republic: Illegal Stamps"
+  },
+  "1467": {
+    "iso2": null,
+    "nameEn": "Ivory Coast: Illegal Stamps",
+    "nameEs": "Ivory Coast: Illegal Stamps"
+  },
+  "1468": {
+    "iso2": null,
+    "nameEn": "Madagascar: Illegal Stamps",
+    "nameEs": "Madagascar: Illegal Stamps"
+  },
+  "1469": {
+    "iso2": null,
+    "nameEn": "Botswana: Illegal Stamps",
+    "nameEs": "Botswana: Illegal Stamps"
+  },
+  "1470": {
+    "iso2": null,
+    "nameEn": "Burundi: Illegal Stamps",
+    "nameEs": "Burundi: Illegal Stamps"
+  },
+  "1471": {
+    "iso2": null,
+    "nameEn": "Mali: Illegal Stamps",
+    "nameEs": "Mali: Illegal Stamps"
+  },
+  "1472": {
+    "iso2": null,
+    "nameEn": "Gabon: Illegal Stamps",
+    "nameEs": "Gabon: Illegal Stamps"
+  },
+  "1473": {
+    "iso2": "CD",
+    "nameEn": "Congo, Dem. Rep.",
+    "nameEs": "Congo, Dem. Rep."
+  },
+  "148": {
+    "iso2": "NA",
+    "nameEn": "Namibia",
+    "nameEs": "Namibia"
+  },
+  "149": {
+    "iso2": "NR",
+    "nameEn": "Nauru",
+    "nameEs": "Nauru"
+  },
+  "1492": {
+    "iso2": null,
+    "nameEn": "Russia, Tuva: Illegal Stamps",
+    "nameEs": "Russia, Tuva: Illegal Stamps"
+  },
+  "1498": {
+    "iso2": null,
+    "nameEn": "Russia, Altay: Illegal Stamps",
+    "nameEs": "Russia, Altay: Illegal Stamps"
+  },
+  "15": {
+    "iso2": "AZ",
+    "nameEn": "Azerbaijan",
+    "nameEs": "Azerbaijan"
+  },
+  "150": {
+    "iso2": "NP",
+    "nameEn": "Nepal",
+    "nameEs": "Nepal"
+  },
+  "1502": {
+    "iso2": null,
+    "nameEn": "Russia, Bashkortostan: Illegal Stamps",
+    "nameEs": "Russia, Bashkortostan: Illegal Stamps"
+  },
+  "1504": {
+    "iso2": null,
+    "nameEn": "Russia, Buryatia: Illegal Stamps",
+    "nameEs": "Russia, Buryatia: Illegal Stamps"
+  },
+  "1505": {
+    "iso2": null,
+    "nameEn": "Russia, Chechen Republic: Illegal Stamps",
+    "nameEs": "Russia, Chechen Republic: Illegal Stamps"
+  },
+  "151": {
+    "iso2": "NL",
+    "nameEn": "Netherlands",
+    "nameEs": "Netherlands"
+  },
+  "1511": {
+    "iso2": null,
+    "nameEn": "Russia, Dagestan: Illegal Stamps",
+    "nameEs": "Russia, Dagestan: Illegal Stamps"
+  },
+  "1518": {
+    "iso2": null,
+    "nameEn": "Russia, Kalmykia: Illegal Stamps",
+    "nameEs": "Russia, Kalmykia: Illegal Stamps"
+  },
+  "152": {
+    "iso2": null,
+    "nameEn": "Netherlands Antilles",
+    "nameEs": "Netherlands Antilles"
+  },
+  "1521": {
+    "iso2": null,
+    "nameEn": "Russia, Karelia: Illegal Stamps",
+    "nameEs": "Russia, Karelia: Illegal Stamps"
+  },
+  "1526": {
+    "iso2": null,
+    "nameEn": "Russia, Komi: Illegal Stamps",
+    "nameEs": "Russia, Komi: Illegal Stamps"
+  },
+  "153": {
+    "iso2": "NC",
+    "nameEn": "New Caledonia",
+    "nameEs": "New Caledonia"
+  },
+  "1534": {
+    "iso2": null,
+    "nameEn": "Russia, Mordovia: Illegal Stamps",
+    "nameEs": "Russia, Mordovia: Illegal Stamps"
+  },
+  "1539": {
+    "iso2": null,
+    "nameEn": "Russia, Sakha Yakutia: Illegal Stamps",
+    "nameEs": "Russia, Sakha Yakutia: Illegal Stamps"
+  },
+  "154": {
+    "iso2": "NZ",
+    "nameEn": "New Zealand",
+    "nameEs": "New Zealand"
+  },
+  "1545": {
+    "iso2": null,
+    "nameEn": "Russia, Udmurtia: Illegal Stamps",
+    "nameEs": "Russia, Udmurtia: Illegal Stamps"
+  },
+  "155": {
+    "iso2": "NI",
+    "nameEn": "Nicaragua",
+    "nameEs": "Nicaragua"
+  },
+  "1552": {
+    "iso2": null,
+    "nameEn": "Somalia: Illegal Stamps",
+    "nameEs": "Somalia: Illegal Stamps"
+  },
+  "1553": {
+    "iso2": null,
+    "nameEn": "Guinea: Illegal Stamps",
+    "nameEs": "Guinea: Illegal Stamps"
+  },
+  "1554": {
+    "iso2": null,
+    "nameEn": "Angola: Illegal Stamps",
+    "nameEs": "Angola: Illegal Stamps"
+  },
+  "1555": {
+    "iso2": null,
+    "nameEn": "Abkhazia: Illegal Stamps",
+    "nameEs": "Abkhazia: Illegal Stamps"
+  },
+  "1557": {
+    "iso2": null,
+    "nameEn": "Eritrea: Illegal Stamps",
+    "nameEs": "Eritrea: Illegal Stamps"
+  },
+  "156": {
+    "iso2": "NE",
+    "nameEn": "Niger",
+    "nameEs": "Niger"
+  },
+  "1560": {
+    "iso2": null,
+    "nameEn": "Turkmenistan: Illegal Stamps",
+    "nameEs": "Turkmenistan: Illegal Stamps"
+  },
+  "1562": {
+    "iso2": null,
+    "nameEn": "Niger: Illegal Stamps",
+    "nameEs": "Niger: Illegal Stamps"
+  },
+  "1568": {
+    "iso2": null,
+    "nameEn": "Georgia, Batumi: Illegal Stamps",
+    "nameEs": "Georgia, Batumi: Illegal Stamps"
+  },
+  "1569": {
+    "iso2": null,
+    "nameEn": "Georgia, South Ossetia: Illegal Stamps",
+    "nameEs": "Georgia, South Ossetia: Illegal Stamps"
+  },
+  "157": {
+    "iso2": "NG",
+    "nameEn": "Nigeria",
+    "nameEs": "Nigeria"
+  },
+  "1570": {
+    "iso2": "OM",
+    "nameEn": "Oman",
+    "nameEs": "Oman"
+  },
+  "1571": {
+    "iso2": null,
+    "nameEn": "Western Sahara: Illegal Stamps",
+    "nameEs": "Western Sahara: Illegal Stamps"
+  },
+  "1577": {
+    "iso2": null,
+    "nameEn": "Cameroun: Illegal Stamps",
+    "nameEs": "Cameroun: Illegal Stamps"
+  },
+  "1578": {
+    "iso2": null,
+    "nameEn": "Liberia: Illegal Stamps",
+    "nameEs": "Liberia: Illegal Stamps"
+  },
+  "1579": {
+    "iso2": null,
+    "nameEn": "Guinea-Bissau: Illegal Stamps",
+    "nameEs": "Guinea-Bissau: Illegal Stamps"
+  },
+  "158": {
+    "iso2": "NU",
+    "nameEn": "Niue",
+    "nameEs": "Niue"
+  },
+  "1581": {
+    "iso2": null,
+    "nameEn": "Somaliland: Illegal Stamps",
+    "nameEs": "Somaliland: Illegal Stamps"
+  },
+  "1583": {
+    "iso2": null,
+    "nameEn": "Ethiopia: Illegal Stamps",
+    "nameEs": "Ethiopia: Illegal Stamps"
+  },
+  "1585": {
+    "iso2": null,
+    "nameEn": "Kyrgyzstan: Illegal Stamps",
+    "nameEs": "Kyrgyzstan: Illegal Stamps"
+  },
+  "1587": {
+    "iso2": null,
+    "nameEn": "Mozambique: Illegal Stamps",
+    "nameEs": "Mozambique: Illegal Stamps"
+  },
+  "159": {
+    "iso2": "NF",
+    "nameEn": "Norfolk Island",
+    "nameEs": "Norfolk Island"
+  },
+  "1591": {
+    "iso2": null,
+    "nameEn": "Ukraine: Illegal Stamps",
+    "nameEs": "Ukraine: Illegal Stamps"
+  },
+  "16": {
+    "iso2": "BS",
+    "nameEn": "Bahamas",
+    "nameEs": "Bahamas"
+  },
+  "1601": {
+    "iso2": null,
+    "nameEn": "United States of America: Illegal Stamps",
+    "nameEs": "United States of America: Illegal Stamps"
+  },
+  "1606": {
+    "iso2": null,
+    "nameEn": "Tajikistan: Illegal Stamps",
+    "nameEs": "Tajikistan: Illegal Stamps"
+  },
+  "1609": {
+    "iso2": null,
+    "nameEn": "São Tomé and Príncipe: Illegal Stamps",
+    "nameEs": "São Tomé and Príncipe: Illegal Stamps"
+  },
+  "161": {
+    "iso2": "NO",
+    "nameEn": "Norway",
+    "nameEs": "Norway"
+  },
+  "1610": {
+    "iso2": null,
+    "nameEn": "Haiti: Illegal Stamps",
+    "nameEs": "Haiti: Illegal Stamps"
+  },
+  "1613": {
+    "iso2": null,
+    "nameEn": "Gambia: Illegal Stamps",
+    "nameEs": "Gambia: Illegal Stamps"
+  },
+  "1616": {
+    "iso2": null,
+    "nameEn": "Maldives: Illegal Stamps",
+    "nameEs": "Maldives: Illegal Stamps"
+  },
+  "162": {
+    "iso2": "OM",
+    "nameEn": "Oman",
+    "nameEs": "Oman"
+  },
+  "1620": {
+    "iso2": null,
+    "nameEn": "Comoros: Illegal Stamps",
+    "nameEs": "Comoros: Illegal Stamps"
+  },
+  "1622": {
+    "iso2": null,
+    "nameEn": "Cabo Verde: Illegal Stamps",
+    "nameEs": "Cabo Verde: Illegal Stamps"
+  },
+  "163": {
+    "iso2": "PK",
+    "nameEn": "Pakistan",
+    "nameEs": "Pakistan"
+  },
+  "1630": {
+    "iso2": null,
+    "nameEn": "Ghana: Illegal Stamps",
+    "nameEs": "Ghana: Illegal Stamps"
+  },
+  "164": {
+    "iso2": "PW",
+    "nameEn": "Palau",
+    "nameEs": "Palau"
+  },
+  "165": {
+    "iso2": "PS",
+    "nameEn": "Palestinian Territory",
+    "nameEs": "Palestinian Territory"
+  },
+  "166": {
+    "iso2": "PA",
+    "nameEn": "Panama",
+    "nameEs": "Panama"
+  },
+  "167": {
+    "iso2": "PG",
+    "nameEn": "Papua New Guinea",
+    "nameEs": "Papua New Guinea"
+  },
+  "168": {
+    "iso2": "PY",
+    "nameEn": "Paraguay",
+    "nameEs": "Paraguay"
+  },
+  "1688": {
+    "iso2": null,
+    "nameEn": "Guyana: Illegal Stamps",
+    "nameEs": "Guyana: Illegal Stamps"
+  },
+  "169": {
+    "iso2": "PE",
+    "nameEn": "Peru",
+    "nameEs": "Peru"
+  },
+  "17": {
+    "iso2": "BH",
+    "nameEn": "Bahrain",
+    "nameEs": "Bahrain"
+  },
+  "170": {
+    "iso2": "PH",
+    "nameEn": "Philippines",
+    "nameEs": "Philippines"
+  },
+  "1700": {
+    "iso2": null,
+    "nameEn": "Lesotho: Illegal Stamps",
+    "nameEs": "Lesotho: Illegal Stamps"
+  },
+  "1705": {
+    "iso2": null,
+    "nameEn": "Namibia: Illegal Stamps",
+    "nameEs": "Namibia: Illegal Stamps"
+  },
+  "171": {
+    "iso2": "PN",
+    "nameEn": "Pitcairn Islands",
+    "nameEs": "Pitcairn Islands"
+  },
+  "1717": {
+    "iso2": null,
+    "nameEn": "Sierra Leone: Illegal Stamps",
+    "nameEs": "Sierra Leone: Illegal Stamps"
+  },
+  "172": {
+    "iso2": "PL",
+    "nameEn": "Poland",
+    "nameEs": "Poland"
+  },
+  "173": {
+    "iso2": "PT",
+    "nameEn": "Portugal",
+    "nameEs": "Portugal"
+  },
+  "1742": {
+    "iso2": null,
+    "nameEn": "Australia: Cinderella Stamps",
+    "nameEs": "Australia: Cinderella Stamps"
+  },
+  "175": {
+    "iso2": "QA",
+    "nameEn": "Qatar",
+    "nameEs": "Qatar"
+  },
+  "1755": {
+    "iso2": null,
+    "nameEn": "Mexico: Cinderella Stamps",
+    "nameEs": "Mexico: Cinderella Stamps"
+  },
+  "176": {
+    "iso2": "RE",
+    "nameEn": "Reunion",
+    "nameEs": "Reunion"
+  },
+  "1760": {
+    "iso2": null,
+    "nameEn": "South Africa: Cinderella Stamps",
+    "nameEs": "South Africa: Cinderella Stamps"
+  },
+  "1762": {
+    "iso2": null,
+    "nameEn": "United Kingdom: Cinderella Stamps",
+    "nameEs": "United Kingdom: Cinderella Stamps"
+  },
+  "1763": {
+    "iso2": null,
+    "nameEn": "United States of America: Cinderella Stamps",
+    "nameEs": "United States of America: Cinderella Stamps"
+  },
+  "1764": {
+    "iso2": null,
+    "nameEn": "France: Cinderella Stamps",
+    "nameEs": "France: Cinderella Stamps"
+  },
+  "1766": {
+    "iso2": null,
+    "nameEn": "Denmark: Cinderellas",
+    "nameEs": "Denmark: Cinderellas"
+  },
+  "1767": {
+    "iso2": null,
+    "nameEn": "Scotland, Staffa: Cinderella Stamps",
+    "nameEs": "Scotland, Staffa: Cinderella Stamps"
+  },
+  "1768": {
+    "iso2": null,
+    "nameEn": "Scotland, Bernera Island: Cinderella Stamps",
+    "nameEs": "Scotland, Bernera Island: Cinderella Stamps"
+  },
+  "177": {
+    "iso2": "RO",
+    "nameEn": "Romania",
+    "nameEs": "Romania"
+  },
+  "1771": {
+    "iso2": null,
+    "nameEn": "Scotland, Davaar Island: Cinderella Stamps",
+    "nameEs": "Scotland, Davaar Island: Cinderella Stamps"
+  },
+  "1773": {
+    "iso2": null,
+    "nameEn": "Scotland, Eynhallow: Cinderella Stamps",
+    "nameEs": "Scotland, Eynhallow: Cinderella Stamps"
+  },
+  "1775": {
+    "iso2": null,
+    "nameEn": "Scotland, Grunay: Cinderella Stamps",
+    "nameEs": "Scotland, Grunay: Cinderella Stamps"
+  },
+  "178": {
+    "iso2": "RU",
+    "nameEn": "Russia",
+    "nameEs": "Russia"
+  },
+  "179": {
+    "iso2": "RW",
+    "nameEn": "Rwanda",
+    "nameEs": "Rwanda"
+  },
+  "1799": {
+    "iso2": null,
+    "nameEn": "Germany: Personalized Stamps",
+    "nameEs": "Germany: Personalized Stamps"
+  },
+  "18": {
+    "iso2": "BD",
+    "nameEn": "Bangladesh",
+    "nameEs": "Bangladesh"
+  },
+  "180": {
+    "iso2": "SH",
+    "nameEn": "Saint Helena",
+    "nameEs": "Saint Helena"
+  },
+  "1800": {
+    "iso2": null,
+    "nameEn": "Kyrgyzstan: Kyrgyz Express Post",
+    "nameEs": "Kyrgyzstan: Kyrgyz Express Post"
+  },
+  "1803": {
+    "iso2": null,
+    "nameEn": "Laos: Illegal Stamps",
+    "nameEs": "Laos: Illegal Stamps"
+  },
+  "1804": {
+    "iso2": null,
+    "nameEn": "Philippines: Cinderella Stamps",
+    "nameEs": "Philippines: Cinderella Stamps"
+  },
+  "1805": {
+    "iso2": null,
+    "nameEn": "Germany, Democratic Republic: Cinderella Stamps",
+    "nameEs": "Germany, Democratic Republic: Cinderella Stamps"
+  },
+  "1806": {
+    "iso2": null,
+    "nameEn": "Sweden: Cinderella Stamps",
+    "nameEs": "Sweden: Cinderella Stamps"
+  },
+  "1807": {
+    "iso2": null,
+    "nameEn": "Norway: Cinderella Stamps",
+    "nameEs": "Norway: Cinderella Stamps"
+  },
+  "1808": {
+    "iso2": null,
+    "nameEn": "Canada: Cinderella Stamps",
+    "nameEs": "Canada: Cinderella Stamps"
+  },
+  "1810": {
+    "iso2": null,
+    "nameEn": "Germany, Federal Republic: Cinderella Stamps",
+    "nameEs": "Germany, Federal Republic: Cinderella Stamps"
+  },
+  "182": {
+    "iso2": "LC",
+    "nameEn": "Saint Lucia",
+    "nameEs": "Saint Lucia"
+  },
+  "1827": {
+    "iso2": null,
+    "nameEn": "Italy: Cinderella Stamps",
+    "nameEs": "Italy: Cinderella Stamps"
+  },
+  "183": {
+    "iso2": "PM",
+    "nameEn": "Saint Pierre and Miquelon",
+    "nameEs": "Saint Pierre and Miquelon"
+  },
+  "184": {
+    "iso2": "VC",
+    "nameEn": "Saint Vincent & The Grenadines",
+    "nameEs": "Saint Vincent & The Grenadines"
+  },
+  "185": {
+    "iso2": "WS",
+    "nameEn": "Samoa",
+    "nameEs": "Samoa"
+  },
+  "186": {
+    "iso2": "SM",
+    "nameEn": "San Marino",
+    "nameEs": "San Marino"
+  },
+  "188": {
+    "iso2": "SA",
+    "nameEn": "Saudi Arabia",
+    "nameEs": "Saudi Arabia"
+  },
+  "189": {
+    "iso2": "SN",
+    "nameEn": "Senegal",
+    "nameEs": "Senegal"
+  },
+  "19": {
+    "iso2": "BB",
+    "nameEn": "Barbados",
+    "nameEs": "Barbados"
+  },
+  "190": {
+    "iso2": "SC",
+    "nameEn": "Seychelles",
+    "nameEs": "Seychelles"
+  },
+  "191": {
+    "iso2": "SL",
+    "nameEn": "Sierra Leone",
+    "nameEs": "Sierra Leone"
+  },
+  "192": {
+    "iso2": "SG",
+    "nameEn": "Singapore",
+    "nameEs": "Singapore"
+  },
+  "193": {
+    "iso2": "SK",
+    "nameEn": "Slovakia",
+    "nameEs": "Slovakia"
+  },
+  "194": {
+    "iso2": "SI",
+    "nameEn": "Slovenia",
+    "nameEs": "Slovenia"
+  },
+  "195": {
+    "iso2": "SB",
+    "nameEn": "Solomon Islands",
+    "nameEs": "Solomon Islands"
+  },
+  "196": {
+    "iso2": "SO",
+    "nameEn": "Somalia",
+    "nameEs": "Somalia"
+  },
+  "197": {
+    "iso2": "ZA",
+    "nameEn": "South Africa",
+    "nameEs": "South Africa"
+  },
+  "198": {
+    "iso2": "GS",
+    "nameEn": "South Georgia and The South Sandwich Islands",
+    "nameEs": "South Georgia and The South Sandwich Islands"
+  },
+  "199": {
+    "iso2": "ES",
+    "nameEn": "Spain",
+    "nameEs": "Spain"
+  },
+  "1991": {
+    "iso2": null,
+    "nameEn": "Netherlands: Private Post Offices",
+    "nameEs": "Netherlands: Private Post Offices"
+  },
+  "1994": {
+    "iso2": null,
+    "nameEn": "New Zealand: Personalized Stamps",
+    "nameEs": "New Zealand: Personalized Stamps"
+  },
+  "1995": {
+    "iso2": null,
+    "nameEn": "New Zealand: Private Post Offices",
+    "nameEs": "New Zealand: Private Post Offices"
+  },
+  "1998": {
+    "iso2": null,
+    "nameEn": "Poland: Personalized Stamps",
+    "nameEs": "Poland: Personalized Stamps"
+  },
+  "2": {
+    "iso2": "AL",
+    "nameEn": "Albania",
+    "nameEs": "Albania"
+  },
+  "20": {
+    "iso2": "BY",
+    "nameEn": "Belarus",
+    "nameEs": "Belarus"
+  },
+  "200": {
+    "iso2": "LK",
+    "nameEn": "Sri Lanka",
+    "nameEs": "Sri Lanka"
+  },
+  "2000": {
+    "iso2": null,
+    "nameEn": "Estonia: Personalized Stamps",
+    "nameEs": "Estonia: Personalized Stamps"
+  },
+  "2001": {
+    "iso2": null,
+    "nameEn": "Czech Republic: Personalized Stamps",
+    "nameEs": "Czech Republic: Personalized Stamps"
+  },
+  "201": {
+    "iso2": "SD",
+    "nameEn": "Sudan",
+    "nameEs": "Sudan"
+  },
+  "2017": {
+    "iso2": null,
+    "nameEn": "Canada: Personalized Stamps",
+    "nameEs": "Canada: Personalized Stamps"
+  },
+  "202": {
+    "iso2": "SR",
+    "nameEn": "Suriname",
+    "nameEs": "Suriname"
+  },
+  "204": {
+    "iso2": "SZ",
+    "nameEn": "Eswatini",
+    "nameEs": "Eswatini"
+  },
+  "205": {
+    "iso2": "SE",
+    "nameEn": "Sweden",
+    "nameEs": "Sweden"
+  },
+  "206": {
+    "iso2": "CH",
+    "nameEn": "Switzerland",
+    "nameEs": "Switzerland"
+  },
+  "207": {
+    "iso2": "SY",
+    "nameEn": "Syria",
+    "nameEs": "Syria"
+  },
+  "208": {
+    "iso2": "TW",
+    "nameEn": "Taiwan",
+    "nameEs": "Taiwan"
+  },
+  "209": {
+    "iso2": "TJ",
+    "nameEn": "Tajikistan",
+    "nameEs": "Tajikistan"
+  },
+  "21": {
+    "iso2": "BE",
+    "nameEn": "Belgium",
+    "nameEs": "Belgium"
+  },
+  "210": {
+    "iso2": "TZ",
+    "nameEn": "Tanzania",
+    "nameEs": "Tanzania"
+  },
+  "211": {
+    "iso2": "TH",
+    "nameEn": "Thailand",
+    "nameEs": "Thailand"
+  },
+  "212": {
+    "iso2": "TG",
+    "nameEn": "Togo",
+    "nameEs": "Togo"
+  },
+  "213": {
+    "iso2": "TK",
+    "nameEn": "Tokelau",
+    "nameEs": "Tokelau"
+  },
+  "214": {
+    "iso2": "TO",
+    "nameEn": "Tonga",
+    "nameEs": "Tonga"
+  },
+  "215": {
+    "iso2": "TT",
+    "nameEn": "Trinidad and Tobago",
+    "nameEs": "Trinidad and Tobago"
+  },
+  "216": {
+    "iso2": "TN",
+    "nameEn": "Tunisia",
+    "nameEs": "Tunisia"
+  },
+  "217": {
+    "iso2": "TR",
+    "nameEn": "Türkiye",
+    "nameEs": "Türkiye"
+  },
+  "2172": {
+    "iso2": null,
+    "nameEn": "Saint Vincent & The Grenadines: Illegal Stamps",
+    "nameEs": "Saint Vincent & The Grenadines: Illegal Stamps"
+  },
+  "218": {
+    "iso2": "TM",
+    "nameEn": "Turkmenistan",
+    "nameEs": "Turkmenistan"
+  },
+  "219": {
+    "iso2": "TC",
+    "nameEn": "Turks and Caicos Islands",
+    "nameEs": "Turks and Caicos Islands"
+  },
+  "22": {
+    "iso2": "BZ",
+    "nameEn": "Belize",
+    "nameEs": "Belize"
+  },
+  "220": {
+    "iso2": "TV",
+    "nameEn": "Tuvalu",
+    "nameEs": "Tuvalu"
+  },
+  "221": {
+    "iso2": "UG",
+    "nameEn": "Uganda",
+    "nameEs": "Uganda"
+  },
+  "222": {
+    "iso2": "UA",
+    "nameEn": "Ukraine",
+    "nameEs": "Ukraine"
+  },
+  "223": {
+    "iso2": "AE",
+    "nameEn": "United Arab Emirates",
+    "nameEs": "United Arab Emirates"
+  },
+  "224": {
+    "iso2": "GB",
+    "nameEn": "United Kingdom of Great Britain & Northern Ireland",
+    "nameEs": "United Kingdom of Great Britain & Northern Ireland"
+  },
+  "225": {
+    "iso2": "US",
+    "nameEn": "United States of America",
+    "nameEs": "United States of America"
+  },
+  "2257": {
+    "iso2": null,
+    "nameEn": "Austria: Local Liberation Issues 1945",
+    "nameEs": "Austria: Local Liberation Issues 1945"
+  },
+  "227": {
+    "iso2": "UY",
+    "nameEn": "Uruguay",
+    "nameEs": "Uruguay"
+  },
+  "228": {
+    "iso2": "UZ",
+    "nameEn": "Uzbekistan",
+    "nameEs": "Uzbekistan"
+  },
+  "229": {
+    "iso2": "VU",
+    "nameEn": "Vanuatu",
+    "nameEs": "Vanuatu"
+  },
+  "23": {
+    "iso2": "BJ",
+    "nameEn": "Benin",
+    "nameEs": "Benin"
+  },
+  "230": {
+    "iso2": "VE",
+    "nameEn": "Venezuela",
+    "nameEs": "Venezuela"
+  },
+  "231": {
+    "iso2": "VN",
+    "nameEn": "Vietnam",
+    "nameEs": "Vietnam"
+  },
+  "232": {
+    "iso2": "VG",
+    "nameEn": "British Virgin Islands",
+    "nameEs": "British Virgin Islands"
+  },
+  "2332": {
+    "iso2": null,
+    "nameEn": "Denmark: Cinderellas Stamps - Christmas Seals",
+    "nameEs": "Denmark: Cinderellas Stamps - Christmas Seals"
+  },
+  "234": {
+    "iso2": "WF",
+    "nameEn": "Wallis and Futuna",
+    "nameEs": "Wallis and Futuna"
+  },
+  "236": {
+    "iso2": "YE",
+    "nameEn": "Yemen",
+    "nameEs": "Yemen"
+  },
+  "238": {
+    "iso2": "ZM",
+    "nameEn": "Zambia",
+    "nameEs": "Zambia"
+  },
+  "239": {
+    "iso2": "ZW",
+    "nameEn": "Zimbabwe",
+    "nameEs": "Zimbabwe"
+  },
+  "24": {
+    "iso2": "BM",
+    "nameEn": "Bermuda",
+    "nameEs": "Bermuda"
+  },
+  "240": {
+    "iso2": "JE",
+    "nameEn": "Jersey",
+    "nameEs": "Jersey"
+  },
+  "241": {
+    "iso2": "IM",
+    "nameEn": "Isle of Man",
+    "nameEs": "Isle of Man"
+  },
+  "242": {
+    "iso2": "GG",
+    "nameEn": "Guernsey",
+    "nameEs": "Guernsey"
+  },
+  "244": {
+    "iso2": "ME",
+    "nameEn": "Montenegro",
+    "nameEs": "Montenegro"
+  },
+  "245": {
+    "iso2": "RS",
+    "nameEn": "Serbia",
+    "nameEs": "Serbia"
+  },
+  "247": {
+    "iso2": null,
+    "nameEn": "Transnistria",
+    "nameEs": "Transnistria"
+  },
+  "248": {
+    "iso2": null,
+    "nameEn": "Abkhazia",
+    "nameEs": "Abkhazia"
+  },
+  "249": {
+    "iso2": null,
+    "nameEn": "Kosovo",
+    "nameEs": "Kosovo"
+  },
+  "25": {
+    "iso2": "BT",
+    "nameEn": "Bhutan",
+    "nameEs": "Bhutan"
+  },
+  "250": {
+    "iso2": null,
+    "nameEn": "Czechoslovakia",
+    "nameEs": "Czechoslovakia"
+  },
+  "252": {
+    "iso2": null,
+    "nameEn": "Soviet Union, USSR",
+    "nameEs": "Soviet Union, USSR"
+  },
+  "253": {
+    "iso2": null,
+    "nameEn": "Ascension Island",
+    "nameEs": "Ascension Island"
+  },
+  "254": {
+    "iso2": null,
+    "nameEn": "Germany, Democratic Republic",
+    "nameEs": "Germany, Democratic Republic"
+  },
+  "255": {
+    "iso2": "CW",
+    "nameEn": "Curaçao",
+    "nameEs": "Curaçao"
+  },
+  "257": {
+    "iso2": null,
+    "nameEn": "Yugoslavia",
+    "nameEs": "Yugoslavia"
+  },
+  "26": {
+    "iso2": "BO",
+    "nameEn": "Bolivia",
+    "nameEs": "Bolivia"
+  },
+  "261": {
+    "iso2": null,
+    "nameEn": "Alderney",
+    "nameEs": "Alderney"
+  },
+  "262": {
+    "iso2": null,
+    "nameEn": "Northern Cyprus",
+    "nameEs": "Northern Cyprus"
+  },
+  "266": {
+    "iso2": null,
+    "nameEn": "Vietnam, South",
+    "nameEs": "Vietnam, South"
+  },
+  "27": {
+    "iso2": "BA",
+    "nameEn": "Bosnia and Herzegovina",
+    "nameEs": "Bosnia and Herzegovina"
+  },
+  "270": {
+    "iso2": null,
+    "nameEn": "Upper Volta",
+    "nameEs": "Upper Volta"
+  },
+  "271": {
+    "iso2": null,
+    "nameEn": "Bohemia and Moravia",
+    "nameEs": "Bohemia and Moravia"
+  },
+  "28": {
+    "iso2": "BW",
+    "nameEn": "Botswana",
+    "nameEs": "Botswana"
+  },
+  "284": {
+    "iso2": null,
+    "nameEn": "Zaire",
+    "nameEs": "Zaire"
+  },
+  "289": {
+    "iso2": null,
+    "nameEn": "Ajman",
+    "nameEs": "Ajman"
+  },
+  "3": {
+    "iso2": "DZ",
+    "nameEn": "Algeria",
+    "nameEs": "Algeria"
+  },
+  "30": {
+    "iso2": "BR",
+    "nameEn": "Brazil",
+    "nameEs": "Brazil"
+  },
+  "309": {
+    "iso2": null,
+    "nameEn": "Azores",
+    "nameEs": "Azores"
+  },
+  "31": {
+    "iso2": "IO",
+    "nameEn": "British Indian Ocean Territory",
+    "nameEs": "British Indian Ocean Territory"
+  },
+  "311": {
+    "iso2": null,
+    "nameEn": "Fujairah",
+    "nameEs": "Fujairah"
+  },
+  "312": {
+    "iso2": null,
+    "nameEn": "Netherlands East Indies",
+    "nameEs": "Netherlands East Indies"
+  },
+  "313": {
+    "iso2": null,
+    "nameEn": "Sharjah",
+    "nameEs": "Sharjah"
+  },
+  "315": {
+    "iso2": null,
+    "nameEn": "British Antarctic Territory",
+    "nameEs": "British Antarctic Territory"
+  },
+  "319": {
+    "iso2": null,
+    "nameEn": "Belgian Congo",
+    "nameEs": "Belgian Congo"
+  },
+  "32": {
+    "iso2": "BN",
+    "nameEn": "Brunei Darussalam",
+    "nameEs": "Brunei Darussalam"
+  },
+  "320": {
+    "iso2": null,
+    "nameEn": "Dahomey",
+    "nameEs": "Dahomey"
+  },
+  "325": {
+    "iso2": null,
+    "nameEn": "Malta, Sovereign Military Order of",
+    "nameEs": "Malta, Sovereign Military Order of"
+  },
+  "326": {
+    "iso2": null,
+    "nameEn": "Nevis",
+    "nameEs": "Nevis"
+  },
+  "33": {
+    "iso2": "BG",
+    "nameEn": "Bulgaria",
+    "nameEs": "Bulgaria"
+  },
+  "34": {
+    "iso2": "BF",
+    "nameEn": "Burkina Faso",
+    "nameEs": "Burkina Faso"
+  },
+  "35": {
+    "iso2": "BI",
+    "nameEn": "Burundi",
+    "nameEs": "Burundi"
+  },
+  "352": {
+    "iso2": null,
+    "nameEn": "New Hebrides",
+    "nameEs": "New Hebrides"
+  },
+  "36": {
+    "iso2": "KH",
+    "nameEn": "Cambodia",
+    "nameEs": "Cambodia"
+  },
+  "362": {
+    "iso2": null,
+    "nameEn": "Newfoundland",
+    "nameEs": "Newfoundland"
+  },
+  "364": {
+    "iso2": null,
+    "nameEn": "Fantasy Issues",
+    "nameEs": "Fantasy Issues"
+  },
+  "37": {
+    "iso2": "CM",
+    "nameEn": "Cameroon",
+    "nameEs": "Cameroon"
+  },
+  "373": {
+    "iso2": null,
+    "nameEn": "Tristan da Cunha",
+    "nameEs": "Tristan da Cunha"
+  },
+  "38": {
+    "iso2": "CA",
+    "nameEn": "Canada",
+    "nameEs": "Canada"
+  },
+  "383": {
+    "iso2": null,
+    "nameEn": "Umm al-Qiwain",
+    "nameEs": "Umm al-Qiwain"
+  },
+  "39": {
+    "iso2": "CV",
+    "nameEn": "Cabo Verde",
+    "nameEs": "Cabo Verde"
+  },
+  "394": {
+    "iso2": null,
+    "nameEn": "India, Portuguese",
+    "nameEs": "India, Portuguese"
+  },
+  "399": {
+    "iso2": null,
+    "nameEn": "Madeira Islands",
+    "nameEs": "Madeira Islands"
+  },
+  "40": {
+    "iso2": "KY",
+    "nameEn": "Cayman Islands",
+    "nameEs": "Cayman Islands"
+  },
+  "409": {
+    "iso2": null,
+    "nameEn": "Ras al Khaimah",
+    "nameEs": "Ras al Khaimah"
+  },
+  "41": {
+    "iso2": "CF",
+    "nameEn": "Central African Republic",
+    "nameEs": "Central African Republic"
+  },
+  "415": {
+    "iso2": null,
+    "nameEn": "Ceylon",
+    "nameEs": "Ceylon"
+  },
+  "419": {
+    "iso2": null,
+    "nameEn": "Yemen, Arab Republic",
+    "nameEs": "Yemen, Arab Republic"
+  },
+  "42": {
+    "iso2": "TD",
+    "nameEn": "Chad",
+    "nameEs": "Chad"
+  },
+  "43": {
+    "iso2": "CL",
+    "nameEn": "Chile",
+    "nameEs": "Chile"
+  },
+  "433": {
+    "iso2": "IN",
+    "nameEn": "India",
+    "nameEs": "India"
+  },
+  "44": {
+    "iso2": "CN",
+    "nameEn": "China, People's Republic",
+    "nameEs": "China, People's Republic"
+  },
+  "442": {
+    "iso2": "CN",
+    "nameEn": "China",
+    "nameEs": "China"
+  },
+  "443": {
+    "iso2": null,
+    "nameEn": "Penrhyn",
+    "nameEs": "Penrhyn"
+  },
+  "446": {
+    "iso2": null,
+    "nameEn": "Netherlands: Personalized Stamps",
+    "nameEs": "Netherlands: Personalized Stamps"
+  },
+  "447": {
+    "iso2": null,
+    "nameEn": "South-West Africa",
+    "nameEs": "South-West Africa"
+  },
+  "45": {
+    "iso2": "CX",
+    "nameEn": "Christmas Island",
+    "nameEs": "Christmas Island"
+  },
+  "453": {
+    "iso2": null,
+    "nameEn": "UNO Geneva",
+    "nameEs": "UNO Geneva"
+  },
+  "46": {
+    "iso2": "CC",
+    "nameEn": "Cocos",
+    "nameEs": "Cocos"
+  },
+  "460": {
+    "iso2": null,
+    "nameEn": "UNO Vienna",
+    "nameEs": "UNO Vienna"
+  },
+  "463": {
+    "iso2": null,
+    "nameEn": "Grenada Grenadines",
+    "nameEs": "Grenada Grenadines"
+  },
+  "464": {
+    "iso2": null,
+    "nameEn": "Saint Kitts",
+    "nameEs": "Saint Kitts"
+  },
+  "467": {
+    "iso2": null,
+    "nameEn": "Andorra, French Administration",
+    "nameEs": "Andorra, French Administration"
+  },
+  "47": {
+    "iso2": "CO",
+    "nameEn": "Colombia",
+    "nameEs": "Colombia"
+  },
+  "470": {
+    "iso2": null,
+    "nameEn": "Free City of Danzig",
+    "nameEs": "Free City of Danzig"
+  },
+  "473": {
+    "iso2": "SX",
+    "nameEn": "Sint Maarten",
+    "nameEs": "Sint Maarten"
+  },
+  "474": {
+    "iso2": null,
+    "nameEn": "Andorra, Spanish Administration",
+    "nameEs": "Andorra, Spanish Administration"
+  },
+  "475": {
+    "iso2": null,
+    "nameEn": "Dubai",
+    "nameEs": "Dubai"
+  },
+  "478": {
+    "iso2": null,
+    "nameEn": "Memel Territory",
+    "nameEs": "Memel Territory"
+  },
+  "48": {
+    "iso2": "KM",
+    "nameEn": "Comoros",
+    "nameEs": "Comoros"
+  },
+  "481": {
+    "iso2": null,
+    "nameEn": "Berlin",
+    "nameEs": "Berlin"
+  },
+  "482": {
+    "iso2": null,
+    "nameEn": "Bosnia and Herzegovina, Croatian Admin.",
+    "nameEs": "Bosnia and Herzegovina, Croatian Admin."
+  },
+  "483": {
+    "iso2": null,
+    "nameEn": "Barbuda",
+    "nameEs": "Barbuda"
+  },
+  "485": {
+    "iso2": null,
+    "nameEn": "Aitutaki",
+    "nameEs": "Aitutaki"
+  },
+  "489": {
+    "iso2": null,
+    "nameEn": "North Borneo",
+    "nameEs": "North Borneo"
+  },
+  "49": {
+    "iso2": "CG",
+    "nameEn": "Congo, Republic",
+    "nameEs": "Congo, Republic"
+  },
+  "495": {
+    "iso2": null,
+    "nameEn": "Canal Zone",
+    "nameEs": "Canal Zone"
+  },
+  "496": {
+    "iso2": null,
+    "nameEn": "Bosnia and Herzegovina, Serbian Admin.",
+    "nameEs": "Bosnia and Herzegovina, Serbian Admin."
+  },
+  "499": {
+    "iso2": null,
+    "nameEn": "Trieste, Zone A",
+    "nameEs": "Trieste, Zone A"
+  },
+  "50": {
+    "iso2": "CD",
+    "nameEn": "Congo, Democratic Republic",
+    "nameEs": "Congo, Democratic Republic"
+  },
+  "505": {
+    "iso2": null,
+    "nameEn": "Niuafo'ou",
+    "nameEs": "Niuafo'ou"
+  },
+  "506": {
+    "iso2": null,
+    "nameEn": "Yemen, People's Democratic Republic",
+    "nameEs": "Yemen, People's Democratic Republic"
+  },
+  "508": {
+    "iso2": null,
+    "nameEn": "Grenada Carriacou & Petite Martinique",
+    "nameEs": "Grenada Carriacou & Petite Martinique"
+  },
+  "509": {
+    "iso2": null,
+    "nameEn": "Manama",
+    "nameEs": "Manama"
+  },
+  "51": {
+    "iso2": "CK",
+    "nameEn": "Cook Islands",
+    "nameEs": "Cook Islands"
+  },
+  "516": {
+    "iso2": null,
+    "nameEn": "Yemen, Kingdom",
+    "nameEs": "Yemen, Kingdom"
+  },
+  "52": {
+    "iso2": "CR",
+    "nameEn": "Costa Rica",
+    "nameEs": "Costa Rica"
+  },
+  "525": {
+    "iso2": null,
+    "nameEn": "UNO New York",
+    "nameEs": "UNO New York"
+  },
+  "53": {
+    "iso2": "CI",
+    "nameEn": "Ivory Coast",
+    "nameEs": "Ivory Coast"
+  },
+  "530": {
+    "iso2": null,
+    "nameEn": "German Realm",
+    "nameEs": "German Realm"
+  },
+  "537": {
+    "iso2": null,
+    "nameEn": "Germany, Saarland",
+    "nameEs": "Germany, Saarland"
+  },
+  "54": {
+    "iso2": "HR",
+    "nameEn": "Croatia",
+    "nameEs": "Croatia"
+  },
+  "546": {
+    "iso2": null,
+    "nameEn": "United States of America: Revenue Stamps",
+    "nameEs": "United States of America: Revenue Stamps"
+  },
+  "55": {
+    "iso2": "CU",
+    "nameEn": "Cuba",
+    "nameEs": "Cuba"
+  },
+  "551": {
+    "iso2": null,
+    "nameEn": "Fiume",
+    "nameEs": "Fiume"
+  },
+  "56": {
+    "iso2": "CY",
+    "nameEn": "Cyprus",
+    "nameEs": "Cyprus"
+  },
+  "57": {
+    "iso2": "CZ",
+    "nameEn": "Czech Republic",
+    "nameEs": "Czech Republic"
+  },
+  "58": {
+    "iso2": "DK",
+    "nameEn": "Denmark",
+    "nameEs": "Denmark"
+  },
+  "582": {
+    "iso2": null,
+    "nameEn": "Grenadines of St. Vincent",
+    "nameEs": "Grenadines of St. Vincent"
+  },
+  "59": {
+    "iso2": "DJ",
+    "nameEn": "Djibouti",
+    "nameEs": "Djibouti"
+  },
+  "6": {
+    "iso2": "AO",
+    "nameEn": "Angola",
+    "nameEs": "Angola"
+  },
+  "60": {
+    "iso2": "DM",
+    "nameEn": "Dominica",
+    "nameEs": "Dominica"
+  },
+  "61": {
+    "iso2": "DO",
+    "nameEn": "Dominican Republic",
+    "nameEs": "Dominican Republic"
+  },
+  "63": {
+    "iso2": "EC",
+    "nameEn": "Ecuador",
+    "nameEs": "Ecuador"
+  },
+  "637": {
+    "iso2": null,
+    "nameEn": "Portuguese Guinea",
+    "nameEs": "Portuguese Guinea"
+  },
+  "64": {
+    "iso2": "EG",
+    "nameEn": "Egypt",
+    "nameEs": "Egypt"
+  },
+  "65": {
+    "iso2": "SV",
+    "nameEn": "El Salvador",
+    "nameEs": "El Salvador"
+  },
+  "655": {
+    "iso2": null,
+    "nameEn": "Spanish Guinea",
+    "nameEs": "Spanish Guinea"
+  },
+  "656": {
+    "iso2": null,
+    "nameEn": "Spanish Morocco",
+    "nameEs": "Spanish Morocco"
+  },
+  "66": {
+    "iso2": "GQ",
+    "nameEn": "Equatorial Guinea",
+    "nameEs": "Equatorial Guinea"
+  },
+  "667": {
+    "iso2": null,
+    "nameEn": "Somalia, Italian Administration",
+    "nameEs": "Somalia, Italian Administration"
+  },
+  "669": {
+    "iso2": null,
+    "nameEn": "Sudetenland",
+    "nameEs": "Sudetenland"
+  },
+  "674": {
+    "iso2": null,
+    "nameEn": "Bavaria",
+    "nameEs": "Bavaria"
+  },
+  "68": {
+    "iso2": "EE",
+    "nameEn": "Estonia",
+    "nameEs": "Estonia"
+  },
+  "69": {
+    "iso2": "ET",
+    "nameEn": "Ethiopia",
+    "nameEs": "Ethiopia"
+  },
+  "7": {
+    "iso2": "AI",
+    "nameEn": "Anguilla",
+    "nameEs": "Anguilla"
+  },
+  "70": {
+    "iso2": "FK",
+    "nameEn": "Falkland Islands",
+    "nameEs": "Falkland Islands"
+  },
+  "71": {
+    "iso2": "FO",
+    "nameEn": "Faroe Islands",
+    "nameEs": "Faroe Islands"
+  },
+  "72": {
+    "iso2": "FJ",
+    "nameEn": "Fiji",
+    "nameEs": "Fiji"
+  },
+  "73": {
+    "iso2": "FI",
+    "nameEn": "Finland",
+    "nameEs": "Finland"
+  },
+  "74": {
+    "iso2": "FR",
+    "nameEn": "France",
+    "nameEs": "France"
+  },
+  "741": {
+    "iso2": null,
+    "nameEn": "Transvaal",
+    "nameEs": "Transvaal"
+  },
+  "750": {
+    "iso2": null,
+    "nameEn": "Wurttemberg",
+    "nameEs": "Wurttemberg"
+  },
+  "76": {
+    "iso2": "PF",
+    "nameEn": "French Polynesia",
+    "nameEs": "French Polynesia"
+  },
+  "77": {
+    "iso2": "TF",
+    "nameEn": "French Southern and Antarctic Lands",
+    "nameEs": "French Southern and Antarctic Lands"
+  },
+  "778": {
+    "iso2": null,
+    "nameEn": "Bosnia and Herzegovina, Austro-Hungarian Admin.",
+    "nameEs": "Bosnia and Herzegovina, Austro-Hungarian Admin."
+  },
+  "78": {
+    "iso2": "GA",
+    "nameEn": "Gabon",
+    "nameEs": "Gabon"
+  },
+  "79": {
+    "iso2": "GM",
+    "nameEn": "Gambia",
+    "nameEs": "Gambia"
+  },
+  "80": {
+    "iso2": "GE",
+    "nameEn": "Georgia",
+    "nameEs": "Georgia"
+  },
+  "81": {
+    "iso2": "DE",
+    "nameEn": "Germany, Federal Republic",
+    "nameEs": "Germany, Federal Republic"
+  },
+  "814": {
+    "iso2": null,
+    "nameEn": "Upper Silesia",
+    "nameEs": "Upper Silesia"
+  },
+  "82": {
+    "iso2": "GH",
+    "nameEn": "Ghana",
+    "nameEs": "Ghana"
+  },
+  "823": {
+    "iso2": null,
+    "nameEn": "France, German Occupation In WWII",
+    "nameEs": "France, German Occupation In WWII"
+  },
+  "83": {
+    "iso2": "GI",
+    "nameEn": "Gibraltar",
+    "nameEs": "Gibraltar"
+  },
+  "834": {
+    "iso2": null,
+    "nameEn": "Germany, American-British-Soviet Occ.",
+    "nameEs": "Germany, American-British-Soviet Occ."
+  },
+  "835": {
+    "iso2": null,
+    "nameEn": "Germany, American-British Occ.",
+    "nameEs": "Germany, American-British Occ."
+  },
+  "837": {
+    "iso2": null,
+    "nameEn": "Germany, Soviet Occupation",
+    "nameEs": "Germany, Soviet Occupation"
+  },
+  "84": {
+    "iso2": "GR",
+    "nameEn": "Greece",
+    "nameEs": "Greece"
+  },
+  "848": {
+    "iso2": null,
+    "nameEn": "Poland, German Occupation In WWII",
+    "nameEs": "Poland, German Occupation In WWII"
+  },
+  "85": {
+    "iso2": "GL",
+    "nameEn": "Greenland",
+    "nameEs": "Greenland"
+  },
+  "86": {
+    "iso2": "GD",
+    "nameEn": "Grenada",
+    "nameEs": "Grenada"
+  },
+  "89": {
+    "iso2": "GT",
+    "nameEn": "Guatemala",
+    "nameEs": "Guatemala"
+  },
+  "9": {
+    "iso2": "AG",
+    "nameEn": "Antigua and Barbuda",
+    "nameEs": "Antigua and Barbuda"
+  },
+  "90": {
+    "iso2": "GN",
+    "nameEn": "Guinea",
+    "nameEs": "Guinea"
+  },
+  "91": {
+    "iso2": "GW",
+    "nameEn": "Guinea-Bissau",
+    "nameEs": "Guinea-Bissau"
+  },
+  "92": {
+    "iso2": "GY",
+    "nameEn": "Guyana",
+    "nameEs": "Guyana"
+  },
+  "93": {
+    "iso2": "HT",
+    "nameEn": "Haiti",
+    "nameEs": "Haiti"
+  },
+  "935": {
+    "iso2": null,
+    "nameEn": "Hungary, Serbian Occupation of Baranya",
+    "nameEs": "Hungary, Serbian Occupation of Baranya"
+  },
+  "939": {
+    "iso2": null,
+    "nameEn": "France: Personalized Stamps",
+    "nameEs": "France: Personalized Stamps"
+  },
+  "942": {
+    "iso2": null,
+    "nameEn": "Hungary - Western Hungary",
+    "nameEs": "Hungary - Western Hungary"
+  },
+  "95": {
+    "iso2": "VA",
+    "nameEn": "Vatican City",
+    "nameEs": "Vatican City"
+  },
+  "96": {
+    "iso2": "HN",
+    "nameEn": "Honduras",
+    "nameEs": "Honduras"
+  },
+  "97": {
+    "iso2": "HK",
+    "nameEn": "Hong Kong",
+    "nameEs": "Hong Kong"
+  },
+  "98": {
+    "iso2": "HU",
+    "nameEn": "Hungary",
+    "nameEs": "Hungary"
+  },
+  "982": {
+    "iso2": null,
+    "nameEn": "Slovenia - Kingdom of Serbs, Croats & Slovenes",
+    "nameEs": "Slovenia - Kingdom of Serbs, Croats & Slovenes"
+  },
+  "983": {
+    "iso2": null,
+    "nameEn": "Croatia - Kingdom of Serbs, Croats & Slovenes",
+    "nameEs": "Croatia - Kingdom of Serbs, Croats & Slovenes"
+  },
+  "986": {
+    "iso2": null,
+    "nameEn": "Bosnia - Kingdom of Serbs, Croats & Slovenes",
+    "nameEs": "Bosnia - Kingdom of Serbs, Croats & Slovenes"
+  },
+  "99": {
+    "iso2": "IS",
+    "nameEn": "Iceland",
+    "nameEs": "Iceland"
+  },
+  "991": {
+    "iso2": null,
+    "nameEn": "Romania - Issues for Transylvania",
+    "nameEs": "Romania - Issues for Transylvania"
+  }
+}

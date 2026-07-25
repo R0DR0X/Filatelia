@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """
-Standalone regression checks for the Colnect -> ISO country mapping.
+Standalone regression checks for the Colnect scraper.
 
 Guards the data-loss bug where every scraped stamp was rejected by D1:
   - countryId used to be Colnect's numeric id (FK violation on Country.id)
   - countryCode used to be a 3-letter truncation of the country slug
     (wrong codes, plus collisions such as Guinea / Guinea-Bissau -> "GUI")
 
+Also guards the 40-hour silent hang: Chromium died, every Playwright await
+blocked forever, and neither the workers nor the phase ever noticed. The
+watchdog decision logic is pure so it can be exercised without a browser.
+
 Run:  python3 scrapers/test_country_mapping.py
 Exits non-zero if any assertion fails.
 """
 
+import asyncio
 import json
 import sys
 import types
@@ -22,10 +27,15 @@ import colnect_global_scraper_v3 as scraper  # noqa: E402
 from colnect_global_scraper_v3 import (  # noqa: E402
     COUNTRY_ISO_MAP,
     ISO_MAP_FILE,
+    NEVER_REPORTED,
+    SILENT_FOREVER,
     country_meta,
     country_payload_fields,
+    drain_queue_with_watchdog,
     parse_detail_page,
     parse_listing_page,
+    should_abort,
+    stalled_workers,
 )
 
 PASSED = 0
@@ -289,6 +299,124 @@ def test_worker_country_validation_guards():
           "failedIds: [] as string[]" in src and "results.failedIds.push(" in src)
 
 
+THRESHOLD = 180.0
+NOW = 10_000.0  # arbitrary time.monotonic() reading; only deltas matter
+
+
+def test_watchdog_decision_logic():
+    # Pure regression guard for the 40h hang: nothing ever noticed that every
+    # worker had stopped making progress.
+    print("\nTEST 12: watchdog stall detection (pure logic)")
+
+    fresh = {0: NOW - 1.0, 1: NOW - 5.0, 2: NOW - 179.9}
+    check("no stalled worker when every heartbeat is fresh",
+          stalled_workers(fresh, NOW, THRESHOLD) == [], repr(stalled_workers(fresh, NOW, THRESHOLD)))
+    check("no abort when every heartbeat is fresh",
+          should_abort(fresh, NOW, THRESHOLD) is False)
+
+    partial = {0: NOW - 1.0, 1: NOW - 300.0, 2: NOW - 600.0}
+    stalled_ids = [wid for wid, _ in stalled_workers(partial, NOW, THRESHOLD)]
+    check("identifies exactly the stalled workers",
+          sorted(stalled_ids) == [1, 2], str(stalled_ids))
+    check("worker 0 is not reported as stalled", 0 not in stalled_ids)
+    check("longest silence is reported first", stalled_ids[0] == 2, str(stalled_ids))
+    check("silence duration is reported",
+          dict(stalled_workers(partial, NOW, THRESHOLD))[1] == 300.0)
+    check("no abort while at least one worker is alive",
+          should_abort(partial, NOW, THRESHOLD) is False)
+
+    all_dead = {0: NOW - 181.0, 1: NOW - 400.0, 2: NOW - 3600.0}
+    check("all workers stalled -> abort",
+          should_abort(all_dead, NOW, THRESHOLD) is True)
+    check("all workers stalled -> all reported",
+          len(stalled_workers(all_dead, NOW, THRESHOLD)) == 3)
+
+    # Boundary: silence exactly equal to the threshold counts as STALLED.
+    at_threshold = {0: NOW - THRESHOLD}
+    check("silence exactly == threshold counts as stalled",
+          [wid for wid, _ in stalled_workers(at_threshold, NOW, THRESHOLD)] == [0])
+    check("silence exactly == threshold aborts",
+          should_abort(at_threshold, NOW, THRESHOLD) is True)
+    just_under = {0: NOW - (THRESHOLD - 0.001)}
+    check("silence just under the threshold does not abort",
+          should_abort(just_under, NOW, THRESHOLD) is False)
+
+    # A worker that never reported (or declared itself dead) is never "fresh".
+    never = {0: NEVER_REPORTED}
+    check("worker without heartbeat is stalled",
+          [wid for wid, _ in stalled_workers(never, NOW, THRESHOLD)] == [0])
+    check("worker without heartbeat has infinite silence",
+          dict(stalled_workers(never, NOW, THRESHOLD))[0] == SILENT_FOREVER)
+    check("worker without heartbeat aborts",
+          should_abort(never, NOW, THRESHOLD) is True)
+    mixed = {0: NOW - 1.0, 1: NEVER_REPORTED}
+    check("never-reported worker is stalled even next to a fresh one",
+          [wid for wid, _ in stalled_workers(mixed, NOW, THRESHOLD)] == [1])
+    check("never-reported worker alone does not abort the batch",
+          should_abort(mixed, NOW, THRESHOLD) is False)
+
+    # No active worker means nothing to supervise, not "everything is stuck".
+    check("empty heartbeat map never aborts", should_abort({}, NOW, THRESHOLD) is False)
+    check("empty heartbeat map has no stalled workers", stalled_workers({}, NOW, THRESHOLD) == [])
+
+
+async def _drain(worker_bodies, threshold, interval, exit_grace, items=1):
+    """Run drain_queue_with_watchdog against fake workers (no browser)."""
+    queue = asyncio.Queue()
+    for i in range(items):
+        await queue.put({"n": i})
+    heartbeats = {}
+    workers = [
+        asyncio.create_task(body(wid, queue, heartbeats))
+        for wid, body in enumerate(worker_bodies)
+    ]
+    return await drain_queue_with_watchdog(
+        "TEST", queue, workers, heartbeats,
+        threshold=threshold, interval=interval, exit_grace=exit_grace,
+    )
+
+
+def test_phase_never_blocks_forever():
+    # queue.join() alone was the top-level hang: this proves the phase unblocks.
+    print("\nTEST 13: the phase aborts instead of hanging on queue.join()")
+
+    async def wedged_worker(wid, queue, heartbeats):
+        heartbeats[wid] = scraper.time.monotonic()
+        queue.get_nowait()          # item taken, task_done() never called
+        await asyncio.sleep(3600)   # simulates a blocked Playwright await
+
+    async def healthy_worker(wid, queue, heartbeats):
+        heartbeats[wid] = scraper.time.monotonic()
+        while True:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            heartbeats[wid] = scraper.time.monotonic()
+            queue.task_done()
+        heartbeats.pop(wid, None)
+
+    aborted = asyncio.run(_drain([wedged_worker, wedged_worker],
+                                 threshold=0.05, interval=0.02, exit_grace=0.05,
+                                 items=2))
+    check("total stall aborts the batch instead of hanging", aborted is True)
+
+    ok = asyncio.run(_drain([healthy_worker, healthy_worker],
+                            threshold=5.0, interval=0.02, exit_grace=0.5,
+                            items=6))
+    check("clean drain is not reported as an abort", ok is False)
+
+    async def dying_worker(wid, queue, heartbeats):
+        heartbeats[wid] = scraper.time.monotonic()
+        queue.get_nowait()  # dies holding an un-acked item
+        heartbeats[wid] = scraper.NEVER_REPORTED
+
+    lost = asyncio.run(_drain([dying_worker, healthy_worker],
+                              threshold=30.0, interval=0.02, exit_grace=0.1,
+                              items=4))
+    check("workers exiting without draining the queue aborts the batch", lost is True)
+
+
 def main():
     print("=" * 66)
     print("Colnect country mapping regression checks")
@@ -304,6 +432,8 @@ def main():
     test_partial_batch_failure()
     test_failed_ids_fallback()
     test_worker_country_validation_guards()
+    test_watchdog_decision_logic()
+    test_phase_never_blocks_forever()
 
     print("\n" + "=" * 66)
     total = PASSED + FAILED

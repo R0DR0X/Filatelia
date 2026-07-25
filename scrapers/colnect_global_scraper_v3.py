@@ -54,6 +54,28 @@ MAX_LOGGED_BATCH_ERRORS = 5  # cap per-batch error lines so logs stay readable
 LISTING_DELAY    = (2.0, 4.0)  # (min, max) seconds between listing pages
 DETAIL_DELAY     = (3.0, 5.5)  # (min, max) seconds between detail pages
 
+# ── Anti-hang budgets ────────────────────────────────────────────────────────
+# A dead Chromium used to leave the whole process blocked in epoll_wait with no
+# network activity and no log line for ~40h. Every Playwright await now has a
+# wall-clock budget, every worker publishes a heartbeat, and a watchdog aborts
+# the batch when all of them go silent.
+NAV_TIMEOUT_MS          = 25000  # page.goto budget (Playwright-side)
+NAV_TIMEOUT_GRACE_S     = 10.0   # extra margin before we distrust goto itself
+CONTENT_TIMEOUT_S       = 8.0    # page.content(): cheap call, must return fast
+SCROLL_TIMEOUT_S        = 25.0   # page.evaluate(scroll): ~15 steps of 60ms + slack
+PAGE_OP_TIMEOUT_S       = 45.0   # context.new_page(), page.route()
+BROWSER_SETUP_TIMEOUT_S = 90.0   # chromium.launch() + new_context() over proxy
+CLOSE_TIMEOUT_S         = 15.0   # page/context/browser close during teardown
+PLAYWRIGHT_STOP_TIMEOUT_S = 30.0 # driver shutdown (can wedge if node is orphaned)
+CONTENT_POLL_ATTEMPTS   = 25     # anti-challenge poll iterations in safe_goto
+
+WORKER_STALL_TIMEOUT_S  = 180.0  # a worker silent this long counts as stalled
+WATCHDOG_INTERVAL_S     = 15.0   # how often the watchdog inspects heartbeats
+WORKER_EXIT_GRACE_S     = 10.0   # queue.join() grace after every worker exited
+STALL_RECOVERY_BACKOFF_S = 30.0  # pause before recreating the browser
+MAX_CONSECUTIVE_STALL_ABORTS = 3 # bounded retries so we never loop hot
+STALL_EXIT_CODE         = 2      # non-zero exit when a phase aborts on a stall
+
 # ── Filtering ────────────────────────────────────────────────────────────────
 NONE_LOGGED_PATTERNS = [
     "none_logged_image", "none-stamps", "pass-challenge"
@@ -590,6 +612,191 @@ def send_batch_sync(stamps):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ── Anti-hang: timeouts, heartbeats, watchdog ────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+
+class BrowserStalled(RuntimeError):
+    """A browser operation exceeded its wall-clock budget (or the browser died).
+
+    Playwright's own timeouts only fire when the CDP connection is alive. When
+    Chromium dies or the connection wedges, the await never returns at all —
+    that is what this exception exists to surface.
+    """
+
+    def __init__(self, operation, timeout=None):
+        self.operation = operation
+        self.timeout = timeout
+        if timeout is None:
+            super().__init__(f"{operation}: browser is not usable")
+        else:
+            super().__init__(f"{operation}: no response after {timeout:.0f}s")
+
+
+async def with_timeout(awaitable, timeout, operation):
+    """Await `awaitable` with a hard wall-clock budget.
+
+    Raises BrowserStalled instead of blocking forever. Every Playwright await
+    in this module must go through here.
+    """
+    try:
+        return await asyncio.wait_for(awaitable, timeout=timeout)
+    except asyncio.TimeoutError:
+        raise BrowserStalled(operation, timeout) from None
+
+
+# Heartbeat sentinel: a worker that never reported progress, or one that
+# declared itself dead. Never treated as fresh.
+NEVER_REPORTED = None
+SILENT_FOREVER = float("inf")
+
+
+def stalled_workers(heartbeats, now, threshold=WORKER_STALL_TIMEOUT_S):
+    """Pure decision helper: which workers have gone silent?
+
+    `heartbeats` maps worker id -> last time.monotonic() stamp, or None for a
+    worker that never reported progress / declared itself dead (its silence is
+    infinite, never fresh).
+
+    Returns [(worker_id, silent_seconds)], longest silence first. Boundary rule:
+    a silence exactly equal to `threshold` counts as STALLED (>= threshold).
+    Side-effect free by design so it can be tested without a browser.
+    """
+    stalled = []
+    for worker_id, stamp in heartbeats.items():
+        silent = SILENT_FOREVER if stamp is NEVER_REPORTED else now - stamp
+        if silent >= threshold:
+            stalled.append((worker_id, silent))
+    stalled.sort(key=lambda pair: (-pair[1], str(pair[0])))
+    return stalled
+
+
+def should_abort(heartbeats, now, threshold=WORKER_STALL_TIMEOUT_S):
+    """Pure decision helper: must the batch be aborted?
+
+    True only when there is at least one active worker and EVERY active worker
+    is stalled. Workers that finished cleanly remove themselves from the map, so
+    an empty map means "nothing left to supervise", not "everything is stuck".
+    """
+    if not heartbeats:
+        return False
+    return len(stalled_workers(heartbeats, now, threshold)) == len(heartbeats)
+
+
+def _format_silence(silent):
+    if silent == SILENT_FOREVER:
+        return "nunca reportó progreso"
+    return f"{silent:.0f}s sin progreso"
+
+
+async def watchdog_loop(phase_label, heartbeats, threshold=None, interval=None):
+    """Thin async shell around stalled_workers()/should_abort().
+
+    Returns the stalled worker list as soon as the whole batch is wedged; the
+    caller uses that completion to unblock the phase. Thresholds resolve at call
+    time so tests can drive it fast.
+    """
+    threshold = WORKER_STALL_TIMEOUT_S if threshold is None else threshold
+    interval  = WATCHDOG_INTERVAL_S if interval is None else interval
+    while True:
+        await asyncio.sleep(interval)
+        now = time.monotonic()
+        snapshot = dict(heartbeats)
+        if not should_abort(snapshot, now, threshold):
+            continue
+        stalled = stalled_workers(snapshot, now, threshold)
+        log_stall_alert(phase_label, stalled, threshold)
+        return stalled
+
+
+def log_stall_alert(phase_label, stalled, threshold=WORKER_STALL_TIMEOUT_S):
+    """Log a stall so loudly that no one can skim past it in a log file."""
+    bar = "!" * 78
+    log.error(bar)
+    log.error(f"🚨🚨🚨 WATCHDOG: TODOS LOS WORKERS DE {phase_label} ESTÁN COLGADOS 🚨🚨🚨")
+    log.error(f"🚨 Umbral de bloqueo: {threshold:.0f}s sin heartbeat.")
+    for worker_id, silent in stalled:
+        log.error(f"🚨   worker {worker_id}: {_format_silence(silent)}")
+    log.error("🚨 Causa típica: Chromium muerto o conexión CDP congelada.")
+    log.error("🚨 Abortando el lote: se cancelan los workers y se recrea el navegador.")
+    log.error(bar)
+
+
+async def _await_workers(workers):
+    """Await every worker task (wrapped: asyncio.wait() only accepts Tasks)."""
+    await asyncio.gather(*workers, return_exceptions=True)
+
+
+async def drain_queue_with_watchdog(phase_label, queue, workers, heartbeats,
+                                    threshold=None, interval=None, exit_grace=None):
+    """Wait for the queue to drain without ever being able to hang.
+
+    `await queue.join()` alone is unrecoverable: if every worker wedges, or a
+    worker dies holding an un-acked item, it blocks forever. Race it against the
+    watchdog and against worker exhaustion instead.
+
+    Returns True when the batch was aborted, False on a clean drain.
+    """
+    join_task    = asyncio.create_task(queue.join())
+    watchdog     = asyncio.create_task(
+        watchdog_loop(phase_label, heartbeats, threshold, interval))
+    workers_task = asyncio.create_task(_await_workers(workers))
+
+    done, _ = await asyncio.wait(
+        {join_task, watchdog, workers_task},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    aborted = watchdog in done
+
+    if not aborted and workers_task in done and not join_task.done():
+        # Every worker exited without draining the queue: their in-flight items
+        # never got task_done(), so join() can never complete on its own.
+        try:
+            grace = WORKER_EXIT_GRACE_S if exit_grace is None else exit_grace
+            await asyncio.wait_for(asyncio.shield(join_task), grace)
+        except asyncio.TimeoutError:
+            aborted = True
+            bar = "!" * 78
+            log.error(bar)
+            log.error(f"🚨🚨🚨 WATCHDOG: TODOS LOS WORKERS DE {phase_label} MURIERON "
+                      f"SIN VACIAR LA COLA 🚨🚨🚨")
+            log.error(f"🚨 Quedan {queue.qsize()} elementos sin procesar. Abortando el lote.")
+            log.error(bar)
+
+    watchdog.cancel()
+    if aborted:
+        for worker in workers:
+            worker.cancel()
+        join_task.cancel()
+    await asyncio.gather(workers_task, join_task, watchdog, return_exceptions=True)
+    return aborted
+
+
+async def close_quietly(label, page, context, browser):
+    """Tear down browser objects without ever blocking the phase."""
+    for name, obj in (("page", page), ("context", context), ("browser", browser)):
+        if obj is None:
+            continue
+        try:
+            await with_timeout(obj.close(), CLOSE_TIMEOUT_S, f"{name}.close ({label})")
+        except Exception as e:
+            log.warning(f"  ⚠️ No se pudo cerrar {name} ({label}): {e}")
+
+
+def ensure_browser_alive(browser, label):
+    """Raise BrowserStalled when Chromium is gone, instead of awaiting a corpse."""
+    if browser is not None and not browser.is_connected():
+        raise BrowserStalled(f"browser desconectado ({label})")
+
+
+async def stop_playwright(playwright):
+    """Stop the driver with a budget: an orphaned node driver can wedge here."""
+    try:
+        await with_timeout(playwright.stop(), PLAYWRIGHT_STOP_TIMEOUT_S, "playwright.stop")
+    except Exception as e:
+        log.warning(f"  ⚠️ playwright.stop() no respondió limpiamente: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ── Browser Helpers ──────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -626,17 +833,31 @@ async def make_context(playwright):
     return browser, context
 
 
-async def safe_goto(page, url, timeout=25000):
+async def safe_goto(page, url, timeout=NAV_TIMEOUT_MS):
+    """Navigate and return the settled HTML, or None.
+
+    Raises BrowserStalled when an await never returns: that is a dead browser,
+    not a bad page, and the worker must stop rather than keep looping.
+    """
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+        await with_timeout(
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout),
+            timeout / 1000 + NAV_TIMEOUT_GRACE_S,
+            f"page.goto({url})",
+        )
+    except BrowserStalled:
+        raise
     except Exception as e:
         log.warning(f"goto error {url}: {e}")
         return None
 
-    for _ in range(25):
+    for _ in range(CONTENT_POLL_ATTEMPTS):
         try:
             cur = page.url
-            html = await page.content()
+            html = await with_timeout(page.content(), CONTENT_TIMEOUT_S,
+                                      f"page.content({url})")
+        except BrowserStalled:
+            raise
         except Exception:
             await asyncio.sleep(1.0)
             continue
@@ -652,9 +873,13 @@ async def safe_goto(page, url, timeout=25000):
 
 
 async def scroll_page(page):
-    """Scroll page incrementally up to 15 steps max."""
+    """Scroll page incrementally up to 15 steps max.
+
+    Propagates BrowserStalled: a scroll that never returns means the renderer
+    is gone, which is exactly the condition that used to hang the process.
+    """
     try:
-        await page.evaluate("""
+        await with_timeout(page.evaluate("""
             () => new Promise(resolve => {
                 let pos = 0;
                 let steps = 0;
@@ -667,25 +892,38 @@ async def scroll_page(page):
                 };
                 step();
             })
-        """)
-        await asyncio.sleep(1.0)
+        """), SCROLL_TIMEOUT_S, "page.evaluate(scroll_page)")
+    except BrowserStalled:
+        raise
     except Exception as e:
         log.debug(f"scroll_page error: {e}")
+    await asyncio.sleep(1.0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ── Phase 1: Listing Worker ──────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def listing_worker(worker_id, queue, playwright, result_lock, counters, batch_buffer):
+async def listing_worker(worker_id, queue, playwright, result_lock, counters,
+                         batch_buffer, heartbeats):
     log.info(f"🕷  Listing worker {worker_id} iniciado.")
-    browser, context = await make_context(playwright)
-    page = await context.new_page()
-
-    await page.route("**/*", lambda r: r.abort()
-        if r.request.resource_type in ("image", "media", "font") else r.continue_())
+    label = f"listing {worker_id}"
+    heartbeats[worker_id] = time.monotonic()
+    browser = context = page = None
 
     try:
+        browser, context = await with_timeout(
+            make_context(playwright), BROWSER_SETUP_TIMEOUT_S, f"make_context ({label})")
+        page = await with_timeout(
+            context.new_page(), PAGE_OP_TIMEOUT_S, f"context.new_page ({label})")
+
+        await with_timeout(
+            page.route("**/*", lambda r: r.abort()
+                if r.request.resource_type in ("image", "media", "font") else r.continue_()),
+            PAGE_OP_TIMEOUT_S, f"page.route ({label})")
+
+        heartbeats[worker_id] = time.monotonic()
+
         while True:
             try:
                 item = queue.get_nowait()
@@ -696,6 +934,9 @@ async def listing_worker(worker_id, queue, playwright, result_lock, counters, ba
             country_id = item["country_id"]
             ccode      = item["country_code"]
 
+            ensure_browser_alive(browser, label)
+            heartbeats[worker_id] = time.monotonic()
+
             await asyncio.sleep(random.uniform(*LISTING_DELAY))
 
             try:
@@ -704,12 +945,16 @@ async def listing_worker(worker_id, queue, playwright, result_lock, counters, ba
                     mark_listing(url, "error")
                     async with result_lock:
                         counters["listing_errors"] += 1
+                    heartbeats[worker_id] = time.monotonic()
                     queue.task_done()
                     continue
 
                 await scroll_page(page)
                 try:
-                    html = await page.content()
+                    html = await with_timeout(page.content(), CONTENT_TIMEOUT_S,
+                                              f"page.content({url})")
+                except BrowserStalled:
+                    raise
                 except Exception:
                     pass
 
@@ -738,17 +983,32 @@ async def listing_worker(worker_id, queue, playwright, result_lock, counters, ba
                 else:
                     mark_listing(url, "empty")
 
+            except BrowserStalled:
+                # Leave the item un-acked on purpose: the batch is aborting and
+                # the URL must stay pending for the next (fresh browser) batch.
+                raise
             except Exception as e:
                 log.warning(f"  ❌ [{worker_id}] Error en {url}: {e}")
                 mark_listing(url, "error")
                 async with result_lock:
                     counters["listing_errors"] += 1
 
+            heartbeats[worker_id] = time.monotonic()
             queue.task_done()
+
+    except asyncio.CancelledError:
+        heartbeats[worker_id] = NEVER_REPORTED
+        raise
+    except BrowserStalled as e:
+        heartbeats[worker_id] = NEVER_REPORTED
+        log.error(f"🚨 [{worker_id}] Navegador bloqueado ({e}). Worker de listado abortado.")
+    except Exception as e:
+        heartbeats[worker_id] = NEVER_REPORTED
+        log.error(f"🚨 [{worker_id}] Worker de listado terminó con error inesperado: {e}")
+    else:
+        heartbeats.pop(worker_id, None)
     finally:
-        await page.close()
-        await context.close()
-        await browser.close()
+        await close_quietly(label, page, context, browser)
     log.info(f"🕷  Listing worker {worker_id} finalizado.")
 
 
@@ -756,12 +1016,21 @@ async def listing_worker(worker_id, queue, playwright, result_lock, counters, ba
 # ── Phase 2: Detail Worker ───────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def detail_worker(worker_id, queue, playwright, result_lock, counters, batch_buffer):
+async def detail_worker(worker_id, queue, playwright, result_lock, counters,
+                        batch_buffer, heartbeats):
     log.info(f"🔬 Detail worker {worker_id} iniciado.")
-    browser, context = await make_context(playwright)
-    page = await context.new_page()
+    label = f"detail {worker_id}"
+    heartbeats[worker_id] = time.monotonic()
+    browser = context = page = None
 
     try:
+        browser, context = await with_timeout(
+            make_context(playwright), BROWSER_SETUP_TIMEOUT_S, f"make_context ({label})")
+        page = await with_timeout(
+            context.new_page(), PAGE_OP_TIMEOUT_S, f"context.new_page ({label})")
+
+        heartbeats[worker_id] = time.monotonic()
+
         while True:
             try:
                 item = queue.get_nowait()
@@ -771,6 +1040,9 @@ async def detail_worker(worker_id, queue, playwright, result_lock, counters, bat
             source_url = item["source_url"]
             basic_data = item["basic_data"]
 
+            ensure_browser_alive(browser, label)
+            heartbeats[worker_id] = time.monotonic()
+
             await asyncio.sleep(random.uniform(*DETAIL_DELAY))
 
             try:
@@ -779,12 +1051,14 @@ async def detail_worker(worker_id, queue, playwright, result_lock, counters, bat
                     increment_stamp_retry(source_url)
                     async with result_lock:
                         counters["detail_errors"] += 1
+                    heartbeats[worker_id] = time.monotonic()
                     queue.task_done()
                     continue
 
                 stamp = parse_detail_page(html, source_url, basic_data, item.get("country_id"))
                 if not stamp:
                     increment_stamp_retry(source_url)
+                    heartbeats[worker_id] = time.monotonic()
                     queue.task_done()
                     continue
 
@@ -808,17 +1082,31 @@ async def detail_worker(worker_id, queue, playwright, result_lock, counters, bat
                             else:
                                 mark_stamp(s["sourceUrl"], "done")
 
+            except BrowserStalled:
+                # Item stays un-acked and pending: the batch is aborting.
+                raise
             except Exception as e:
                 log.warning(f"  ❌ [{worker_id}] Error detalle {source_url}: {e}")
                 increment_stamp_retry(source_url)
                 async with result_lock:
                     counters["detail_errors"] += 1
 
+            heartbeats[worker_id] = time.monotonic()
             queue.task_done()
+
+    except asyncio.CancelledError:
+        heartbeats[worker_id] = NEVER_REPORTED
+        raise
+    except BrowserStalled as e:
+        heartbeats[worker_id] = NEVER_REPORTED
+        log.error(f"🚨 [{worker_id}] Navegador bloqueado ({e}). Worker de detalle abortado.")
+    except Exception as e:
+        heartbeats[worker_id] = NEVER_REPORTED
+        log.error(f"🚨 [{worker_id}] Worker de detalle terminó con error inesperado: {e}")
+    else:
+        heartbeats.pop(worker_id, None)
     finally:
-        await page.close()
-        await context.close()
-        await browser.close()
+        await close_quietly(label, page, context, browser)
     log.info(f"🔬 Detail worker {worker_id} finalizado.")
 
 
@@ -827,10 +1115,15 @@ async def detail_worker(worker_id, queue, playwright, result_lock, counters, bat
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def run_listing_phase():
-    """Phase 1: Discover stamps from listing pages continuously."""
+    """Phase 1: Discover stamps from listing pages continuously.
+
+    Returns True when the phase gave up after repeated stalls.
+    """
     counters     = {"stamps_discovered": 0, "listing_errors": 0}
     result_lock  = asyncio.Lock()
     batch_buffer = []
+    consecutive_aborts = 0
+    gave_up = False
 
     while True:
         pending = fetch_pending_listing(limit=1000)
@@ -843,25 +1136,54 @@ async def run_listing_phase():
         for item in pending:
             await queue.put(item)
 
-        async with async_playwright() as playwright:
+        heartbeats = {}
+        playwright = await async_playwright().start()
+        try:
             workers = [
-                asyncio.create_task(listing_worker(i, queue, playwright, result_lock, counters, batch_buffer))
+                asyncio.create_task(listing_worker(
+                    i, queue, playwright, result_lock, counters, batch_buffer, heartbeats))
                 for i in range(LISTING_WORKERS)
             ]
-            await queue.join()
-            await asyncio.gather(*workers, return_exceptions=True)
+            aborted = await drain_queue_with_watchdog(
+                "FASE 1 (listado)", queue, workers, heartbeats)
+        finally:
+            await stop_playwright(playwright)
 
+        if not aborted:
+            consecutive_aborts = 0
+            continue
+
+        consecutive_aborts += 1
+        log.error(
+            f"🚨 Lote de listado abortado por bloqueo "
+            f"({consecutive_aborts}/{MAX_CONSECUTIVE_STALL_ABORTS} consecutivos)."
+        )
+        if consecutive_aborts >= MAX_CONSECUTIVE_STALL_ABORTS:
+            log.error("💀 Fase 1 abandonada: el navegador se bloquea una y otra vez.")
+            gave_up = True
+            break
+        log.error(f"🔁 Recreando el navegador en {STALL_RECOVERY_BACKOFF_S:.0f}s...")
+        await asyncio.sleep(STALL_RECOVERY_BACKOFF_S)
+
+    # Always flush: an aborted batch must not silently drop buffered stamps.
     if batch_buffer:
         send_batch_sync(batch_buffer)
+        batch_buffer.clear()
 
     log.info(f"✅ Fase 1 completa. Total sellos descubiertos: {counters['stamps_discovered']:,}")
+    return gave_up
 
 
 async def run_detail_phase():
-    """Phase 2: Enrich stamps with full detail page data."""
+    """Phase 2: Enrich stamps with full detail page data.
+
+    Returns True when the phase gave up after repeated stalls.
+    """
     counters     = {"detail_done": 0, "detail_errors": 0}
     result_lock  = asyncio.Lock()
     batch_buffer = []
+    consecutive_aborts = 0
+    gave_up = False
 
     while True:
         pending = fetch_pending_detail(limit=1000)
@@ -874,16 +1196,36 @@ async def run_detail_phase():
         for item in pending:
             await queue.put(item)
 
-        async with async_playwright() as playwright:
+        heartbeats = {}
+        playwright = await async_playwright().start()
+        try:
             workers = [
-                asyncio.create_task(
-                    detail_worker(i, queue, playwright, result_lock, counters, batch_buffer)
-                )
+                asyncio.create_task(detail_worker(
+                    i, queue, playwright, result_lock, counters, batch_buffer, heartbeats))
                 for i in range(DETAIL_WORKERS)
             ]
-            await queue.join()
-            await asyncio.gather(*workers, return_exceptions=True)
+            aborted = await drain_queue_with_watchdog(
+                "FASE 2 (detalle)", queue, workers, heartbeats)
+        finally:
+            await stop_playwright(playwright)
 
+        if not aborted:
+            consecutive_aborts = 0
+            continue
+
+        consecutive_aborts += 1
+        log.error(
+            f"🚨 Lote de detalle abortado por bloqueo "
+            f"({consecutive_aborts}/{MAX_CONSECUTIVE_STALL_ABORTS} consecutivos)."
+        )
+        if consecutive_aborts >= MAX_CONSECUTIVE_STALL_ABORTS:
+            log.error("💀 Fase 2 abandonada: el navegador se bloquea una y otra vez.")
+            gave_up = True
+            break
+        log.error(f"🔁 Recreando el navegador en {STALL_RECOVERY_BACKOFF_S:.0f}s...")
+        await asyncio.sleep(STALL_RECOVERY_BACKOFF_S)
+
+    # Always flush: an aborted batch must not silently drop buffered stamps.
     if batch_buffer:
         failed = send_batch_sync(batch_buffer)
         for s in batch_buffer:
@@ -891,8 +1233,10 @@ async def run_detail_phase():
                 increment_stamp_retry(s["sourceUrl"])
             else:
                 mark_stamp(s["sourceUrl"], "done")
+        batch_buffer.clear()
 
     log.info(f"✅ Fase 2 completa. Detalles extraídos: {counters['detail_done']:,}")
+    return gave_up
 
 
 async def main():
@@ -908,14 +1252,22 @@ async def main():
         seed_country_base_urls(countries)
 
     mode = sys.argv[1] if len(sys.argv) > 1 else "both"
+    stalled = False
     if mode in ("listing", "both"):
-        await run_listing_phase()
+        stalled = await run_listing_phase() or stalled
 
     if mode in ("detail", "both"):
-        await run_detail_phase()
+        stalled = await run_detail_phase() or stalled
+
+    if stalled:
+        # Exit non-zero so a supervisor can tell "died" from "finished".
+        log.error("💀 PROCESO ABORTADO POR BLOQUEO DEL NAVEGADOR — "
+                  f"trabajo incompleto, saliendo con código {STALL_EXIT_CODE}.")
+        return STALL_EXIT_CODE
 
     log.info("\n🎉 Proceso finalizado.")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()))

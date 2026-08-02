@@ -212,11 +212,22 @@ if [[ -z "$TOKEN" ]]; then
   info "Re-run with the token in the environment to check it:"
   info "  ADMIN_API_TOKEN=<value> bash scripts/ops/e1-rollout.sh"
 else
+  # Which build is live? The token only means something from PR2 onward, so
+  # a 403 before the cutover says nothing about the secret being wrong.
+  legacy=$(curl -s -o /dev/null -w '%{http_code}' "$WORKER_URL/auth/me")
+  if [[ "$legacy" != "404" ]]; then
+    warn "The deployed Worker still serves /auth/* ($legacy), so it predates the cutover."
+    info "It has no notion of X-Admin-Token yet. A 403 below is expected and"
+    info "does NOT mean the secret is wrong. Re-run this after deploying."
+  fi
+
   code=$(curl -s -o /dev/null -w '%{http_code}' -X GET "$WORKER_URL/admin/stamps?limit=1" -H "X-Admin-Token: $TOKEN")
-  if [[ "$code" == "403" ]]; then
-    bad "The Worker rejected the token (403)."
-    info "The deployed Worker's secret does not match what you just pasted."
+  if [[ "$code" == "403" && "$legacy" == "404" ]]; then
+    bad "The Worker rejected the token (403) and is running the new build."
+    info "The Worker secret does not match the token you passed."
     info "Re-run phase 3 before going further."
+  elif [[ "$code" == "403" ]]; then
+    info "403, as expected from the pre-cutover build."
   elif [[ "$code" == "200" ]]; then
     ok "The Worker accepted the service token."
   else

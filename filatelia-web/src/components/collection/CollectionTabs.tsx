@@ -1,20 +1,38 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { UserCollectionItem, ListType, ConditionGrade } from "@/types/collection";
-import { Trash2, Edit2, Check, Bookmark, RefreshCw, Archive, Sparkles } from "lucide-react";
+import { collectionFailureMessage, listSupportsQuantity } from "@/lib/collectionControl";
+import type { CollectionActionResult } from "@/lib/collectionControl";
+import { Trash2, Edit2, Check, Bookmark, RefreshCw, Archive, Sparkles, EyeOff, Stamp as StampIcon, AlertCircle } from "lucide-react";
 
+// Quantity is only a meaningful field for the "collection" list (how many
+// copies you own) — mirrors the same decision made for the four-state
+// widget on the sello detail page (see src/lib/collectionControl.ts, which
+// owns the `listSupportsQuantity` predicate both surfaces gate on).
+// Wishlist/trade/ignore rows are membership-only: they never expose a
+// quantity editor here, and never display a quantity either.
+//
+// The two callbacks return the write's RESULT rather than `Promise<void>`:
+// with `void` this component had no way to tell a save that landed from one
+// that 401'd, so it closed the editor either way and a failed save looked
+// exactly like a successful one that reverted. A result lets it keep the
+// editor (and the user's input) open and say what went wrong, in Spanish.
 interface CollectionTabsProps {
   items: UserCollectionItem[];
-  onUpdateCondition?: (id: number, condition: ConditionGrade, notes?: string) => Promise<void>;
-  onDeleteItem?: (id: number) => Promise<void>;
+  onUpdateItem?: (
+    id: number,
+    updates: { condition: ConditionGrade; quantity?: number; notes?: string }
+  ) => Promise<CollectionActionResult>;
+  onDeleteItem?: (id: number) => Promise<CollectionActionResult>;
   activeTab?: ListType;
   onTabChange?: (tab: ListType) => void;
 }
 
 export function CollectionTabs({
   items,
-  onUpdateCondition,
+  onUpdateItem,
   onDeleteItem,
   activeTab = "collection",
   onTabChange,
@@ -23,7 +41,12 @@ export function CollectionTabs({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editCondition, setEditCondition] = useState<ConditionGrade>("MNH");
   const [editNotes, setEditNotes] = useState<string>("");
+  const [editQuantity, setEditQuantity] = useState<number>(1);
   const [filterCondition, setFilterCondition] = useState<string>("all");
+  // Failure copy scoped to the row it belongs to: a card whose delete 401'd
+  // must say so on that card, not blame an unrelated one.
+  const [itemError, setItemError] = useState<{ id: number; message: string } | null>(null);
+  const [pendingId, setPendingId] = useState<number | null>(null);
 
   const handleSelectTab = (tab: ListType) => {
     setCurrentTab(tab);
@@ -38,13 +61,49 @@ export function CollectionTabs({
     setEditingId(item.id);
     setEditCondition(item.condition);
     setEditNotes(item.notes || "");
+    setEditQuantity(item.quantity);
+    setItemError(null);
   };
 
-  const saveEdit = async (id: number) => {
-    if (onUpdateCondition) {
-      await onUpdateCondition(id, editCondition, editNotes);
+  const saveEdit = async (item: UserCollectionItem) => {
+    if (!onUpdateItem) {
+      setEditingId(null);
+      return;
     }
+
+    setPendingId(item.id);
+    setItemError(null);
+    const result = await onUpdateItem(item.id, {
+      condition: editCondition,
+      notes: editNotes,
+      quantity: listSupportsQuantity(item.listType)
+        ? Math.max(1, Math.floor(editQuantity) || 1)
+        : undefined,
+    });
+    setPendingId(null);
+
+    const message = collectionFailureMessage(result);
+    if (message) {
+      // The save did NOT land. Closing the editor here would show the user
+      // their old values back with no explanation — indistinguishable from a
+      // successful save that reverted — and throw away what they typed.
+      setItemError({ id: item.id, message });
+      return;
+    }
+
     setEditingId(null);
+  };
+
+  const deleteItem = async (item: UserCollectionItem) => {
+    if (!onDeleteItem) return;
+
+    setPendingId(item.id);
+    setItemError(null);
+    const result = await onDeleteItem(item.id);
+    setPendingId(null);
+
+    const message = collectionFailureMessage(result);
+    if (message) setItemError({ id: item.id, message });
   };
 
   const getConditionColor = (grade: ConditionGrade) => {
@@ -99,6 +158,17 @@ export function CollectionTabs({
           >
             <RefreshCw size={14} /> Intercambio ({items.filter((i) => i.listType === "trade").length})
           </button>
+
+          <button
+            onClick={() => handleSelectTab("ignore")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              currentTab === "ignore"
+                ? "bg-zinc-800 text-zinc-300 border border-white/20"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <EyeOff size={14} /> Ignorados ({items.filter((i) => i.listType === "ignore").length})
+          </button>
         </div>
 
         {/* Condition Grade Filter */}
@@ -133,17 +203,36 @@ export function CollectionTabs({
               className="bg-zinc-900/60 border border-white/10 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-white/20 transition-all"
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h4 className="text-white font-serif font-semibold text-sm">
-                    {item.stampTitle || `Sello ID ${item.stampId}`}
-                  </h4>
-                  {item.stampCatalogNumber && (
-                    <span className="text-[10px] font-mono text-zinc-500">{item.stampCatalogNumber}</span>
-                  )}
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="relative w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-zinc-800 border border-white/5 flex items-center justify-center">
+                    {item.stampImage ? (
+                      <Image
+                        src={item.stampImage}
+                        alt={item.stampTitle || item.stampId}
+                        fill
+                        className="object-contain p-1"
+                        sizes="48px"
+                        unoptimized
+                      />
+                    ) : (
+                      <StampIcon size={18} className="text-zinc-600" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-white font-serif font-semibold text-sm truncate">
+                      {item.stampTitle || `Sello ID ${item.stampId}`}
+                    </h4>
+                    {item.stampCatalogNumber && (
+                      <span className="text-[10px] font-mono text-zinc-500">{item.stampCatalogNumber}</span>
+                    )}
+                    {listSupportsQuantity(item.listType) && (
+                      <div className="text-[10px] text-zinc-500 mt-0.5">Cantidad: {item.quantity}</div>
+                    )}
+                  </div>
                 </div>
 
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getConditionColor(
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border shrink-0 ${getConditionColor(
                     item.condition
                   )}`}
                 >
@@ -168,6 +257,19 @@ export function CollectionTabs({
                     </select>
                   </div>
 
+                  {listSupportsQuantity(item.listType) && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">Cantidad:</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editQuantity}
+                        onChange={(e) => setEditQuantity(Number(e.target.value))}
+                        className="w-16 bg-zinc-800 border border-white/10 text-xs text-white rounded px-2 py-1"
+                      />
+                    </div>
+                  )}
+
                   <input
                     type="text"
                     value={editNotes}
@@ -184,15 +286,23 @@ export function CollectionTabs({
                       Cancelar
                     </button>
                     <button
-                      onClick={() => saveEdit(item.id)}
-                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1"
+                      onClick={() => saveEdit(item)}
+                      disabled={pendingId === item.id}
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Check size={10} /> Guardar
+                      <Check size={10} /> {pendingId === item.id ? "Guardando…" : "Guardar"}
                     </button>
                   </div>
                 </div>
               ) : (
                 <p className="text-zinc-400 text-xs italic">{item.notes || "Sin notas adicionales"}</p>
+              )}
+
+              {itemError?.id === item.id && (
+                <p role="alert" className="flex items-start gap-1.5 text-[11px] text-red-400">
+                  <AlertCircle size={12} className="shrink-0 mt-px" />
+                  <span>{itemError.message}</span>
+                </p>
               )}
 
               {/* Controls */}
@@ -209,8 +319,9 @@ export function CollectionTabs({
                   </button>
                   {onDeleteItem && (
                     <button
-                      onClick={() => onDeleteItem(item.id)}
-                      className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                      onClick={() => deleteItem(item)}
+                      disabled={pendingId === item.id}
+                      className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       title="Eliminar de lista"
                     >
                       <Trash2 size={13} />

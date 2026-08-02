@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Stamp, Calendar, MapPin, DollarSign, Palette, Shield, Tag, Hash, Loader2 } from "lucide-react";
+import CollectionControl from "@/components/collection/CollectionControl";
+import { formatOrderMoney } from "@/lib/checkout";
 
 const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
 
@@ -215,7 +217,7 @@ export default function SelloDetailClient({ id }: { id: string }) {
                   <div className="flex items-center gap-2 text-moss-green text-xs mb-1">
                     <DollarSign size={13} /> Precio mercado
                   </div>
-                  <div className="text-moss-green-light font-bold">${stamp.marketPriceUsd.toFixed(2)}</div>
+                  <div className="text-moss-green-light font-bold">{formatOrderMoney(stamp.marketPriceUsd, "USD")}</div>
                 </div>
               )}
             </div>
@@ -269,13 +271,11 @@ export default function SelloDetailClient({ id }: { id: string }) {
             )}
 
             {/* Actions */}
-            <div className="flex gap-3 pt-4 border-t border-white/5">
-              <button className="flex-1 py-3 bg-moss-green hover:bg-moss-green-dark text-white font-bold rounded-xl transition-colors text-sm">
-                + Añadir a Mi Colección
-              </button>
+            <div className="space-y-3 pt-4 border-t border-white/5">
+              <CollectionControl stampId={id} />
               {stamp.marketPriceUsd && (
-                <button className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl border border-moss-green/30 transition-colors text-sm">
-                  Comprar — ${stamp.marketPriceUsd.toFixed(2)}
+                <button className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl border border-moss-green/30 transition-colors text-sm">
+                  Comprar — {formatOrderMoney(stamp.marketPriceUsd, "USD")}
                 </button>
               )}
             </div>

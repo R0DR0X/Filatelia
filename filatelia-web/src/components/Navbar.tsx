@@ -66,6 +66,7 @@ export default function Navbar() {
     { href: "/identificar", label: "Identificar" },
     { href: "/tienda", label: "Tienda" },
     { href: "/subastas", label: "Subastas" },
+    { href: "/colecciones", label: "Mi Colección" },
   ];
 
   return (

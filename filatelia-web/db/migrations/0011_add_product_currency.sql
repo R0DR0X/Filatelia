@@ -1,0 +1,45 @@
+-- D1 Migration v11: add a nullable `currency` column to `Product`.
+--
+-- WHY: `Product.price` is stored in MIXED, UNLABELLED currencies — some
+-- rows are soles, some are dollars, and there is no existing column that
+-- says which. `Stamp.marketPriceUsd` is unambiguously USD by its own column
+-- name, but `Product` has never recorded a currency at all. Before this
+-- migration, `src/lib/db/orders.ts` `priceOrder` (and the previous UI) both
+-- silently assumed every `Product.price` was USD — which is false for an
+-- unknown subset of rows and cannot be told apart from the data alone.
+--
+-- This migration does NOT populate the column and does NOT guess a value
+-- for any existing row. There is no exchange rate anywhere in this
+-- codebase, and inventing one — or defaulting every row to 'USD' — would
+-- silently misprice whichever rows are actually soles. The column starts
+-- NULL for every row on purpose: NULL means "not yet declared", not "USD".
+--
+-- OPERATIONAL PRECONDITION: application code (`priceOrder`) refuses to
+-- price any `Product` row whose `currency` is NULL. The store CANNOT take
+-- orders for a product until an operator sets its currency explicitly. See
+-- `openspec/changes/e4-collector-account/tasks.md` for the read-only query
+-- that finds every sellable row still missing one.
+--
+-- CHOICE OF ADD COLUMN vs recreate: unlike 0009 (which needed to widen an
+-- existing CHECK constraint SQLite cannot ALTER), this is a brand new
+-- nullable column with no existing CHECK to preserve, so a plain
+-- `ALTER TABLE ADD COLUMN` is sufficient and lower-risk than a
+-- create-copy-drop-rename. No DB-level CHECK is added here deliberately:
+-- SQLite's ADD COLUMN + CHECK interaction is version-sensitive and this
+-- migration favors a change that is unambiguously safe to run once over one
+-- that also enforces the enum at the DB level. `priceOrder` enforces the
+-- enum ('PEN' | 'USD' | unknown) in application code instead — the same
+-- belt-and-suspenders split point 0009's header discusses, just resolved on
+-- the application side here because the DB-level option is riskier for this
+-- specific ALTER.
+--
+-- Safe to run more than once: `ALTER TABLE ADD COLUMN` on a column that
+-- already exists errors instead of silently no-op'ing in SQLite, so this is
+-- still a single-shot artifact like 0009/0010 — re-running it after it has
+-- already landed will fail loudly, not corrupt data.
+--
+-- NOT EXECUTED BY THIS CHANGE. This file is committed as a reviewable
+-- artifact only. Running it against the real D1 database is a separate,
+-- explicitly user-authorized step (same convention as 0007/0008/0009/0010).
+
+ALTER TABLE Product ADD COLUMN currency TEXT;

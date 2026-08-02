@@ -8,48 +8,12 @@ import type { AuthUser } from "@/lib/auth";
 import Link from "next/link";
 import { getInitials } from "@/lib/utils";
 import { OrderRecord } from "@/types/order";
+import { formatOrderDate, formatOrderMoney } from "@/lib/checkout";
 import { CollectionTabs } from "@/components/collection/CollectionTabs";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
+import { deleteCollectionItemById, updateCollectionItemFields } from "@/lib/collectionControl";
+import type { CollectionActionResult } from "@/lib/collectionControl";
 import { UserCollectionItem, ConditionGrade, MatchProposal, ListType } from "@/types/collection";
-
-const DEFAULT_ORDERS: OrderRecord[] = [
-  {
-    id: "ORD-2026-94812",
-    date: "2026-07-20",
-    itemsCount: 2,
-    totalAmount: 185.00,
-    status: "Completed",
-    shippingDetails: {
-      fullName: "Rodrigo Filatelia",
-      address: "Av. Larco 456, Depto 302",
-      city: "Lima",
-      postalCode: "15074",
-      phone: "+51 999 888 777"
-    },
-    paymentMethod: "yape_plin",
-    items: [
-      { id: "stamp-01", title: "Perú 1857 1d Azul UN DINERO", price: 150.00, quantity: 1, scott: "Scott #1" },
-      { id: "stamp-02", title: "Perú 1858 1d Rojo Frambuesa", price: 35.00, quantity: 1, scott: "Scott #3" }
-    ]
-  },
-  {
-    id: "ORD-2026-88912",
-    date: "2026-07-15",
-    itemsCount: 1,
-    totalAmount: 95.00,
-    status: "Processing",
-    shippingDetails: {
-      fullName: "Rodrigo Filatelia",
-      address: "Av. Larco 456, Depto 302",
-      city: "Lima",
-      postalCode: "15074",
-      phone: "+51 999 888 777"
-    },
-    paymentMethod: "mercadopago",
-    items: [
-      { id: "stamp-03", title: "Perú 1860 1d Azul Escudo", price: 95.00, quantity: 1, scott: "Scott #7" }
-    ]
-  }
-];
 
 interface UserAuctionBid {
   auctionId: string;
@@ -92,11 +56,15 @@ export default function PerfilClient() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [ordersError, setOrdersError] = useState(false);
   const [activeTab, setActiveTab] = useState<"coleccion" | "intercambios" | "pedidos" | "subastas">("coleccion");
   
   const [collectionItems, setCollectionItems] = useState<UserCollectionItem[]>([]);
+  const [collectionError, setCollectionError] = useState(false);
   const [matchProposals, setMatchProposals] = useState<MatchProposal[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+  const [matchesError, setMatchesError] = useState(false);
 
   useEffect(() => {
     getMe().then((result) => {
@@ -110,44 +78,62 @@ export default function PerfilClient() {
       }
       const u = result.user;
       setUser(u);
-      
-      if (typeof window !== "undefined") {
-        try {
-          const stored = localStorage.getItem("fp_orders");
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            setOrders(Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_ORDERS);
+
+      // Every fetch below is bounded (fetchWithTimeout): this page keeps a
+      // full-screen spinner up until all three settle, so a single hanging
+      // response used to freeze the whole profile with no error and no way
+      // out.
+
+      // Fetch order history
+      setLoadingOrders(true);
+      const ordersFetch = fetchWithTimeout("/api/orders")
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to fetch orders");
+          return res.json();
+        })
+        .then((data) => {
+          if (data.success && Array.isArray(data.orders)) {
+            setOrders(data.orders);
           } else {
-            setOrders(DEFAULT_ORDERS);
+            setOrdersError(true);
           }
-        } catch {
-          setOrders(DEFAULT_ORDERS);
-        }
-      }
+        })
+        .catch(() => setOrdersError(true))
+        .finally(() => setLoadingOrders(false));
 
       // Fetch user collection
-      const collectionFetch = fetch("/api/collection")
+      const collectionFetch = fetchWithTimeout("/api/collection")
         .then((res) => res.json())
         .then((data) => {
           if (data.success && Array.isArray(data.items)) {
             setCollectionItems(data.items);
+          } else {
+            setCollectionError(true);
           }
         })
-        .catch(console.error);
+        .catch((err) => {
+          console.error("Failed to load collection:", err);
+          setCollectionError(true);
+        });
 
       // Fetch trade matches
       setLoadingMatches(true);
-      const matchFetch = fetch("/api/match")
+      const matchFetch = fetchWithTimeout("/api/match")
         .then((res) => res.json())
         .then((data) => {
           if (data.success && Array.isArray(data.proposals)) {
             setMatchProposals(data.proposals);
+          } else {
+            setMatchesError(true);
           }
         })
-        .catch(console.error)
+        .catch((err) => {
+          console.error("Failed to load trade matches:", err);
+          setMatchesError(true);
+        })
         .finally(() => setLoadingMatches(false));
 
-      Promise.allSettled([collectionFetch, matchFetch]).finally(() => {
+      Promise.allSettled([collectionFetch, matchFetch, ordersFetch]).finally(() => {
         setLoading(false);
       });
     });
@@ -158,34 +144,38 @@ export default function PerfilClient() {
     window.location.href = "/";
   };
 
-  const handleUpdateCondition = async (id: number, condition: ConditionGrade, notes?: string) => {
-    try {
-      const res = await fetch("/api/collection", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, condition, notes }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCollectionItems((prev) =>
-          prev.map((item) => (item.id === id ? { ...item, condition, notes: notes || "" } : item))
-        );
-      }
-    } catch (err) {
-      console.error("Failed to update item:", err);
+  // The PUT/DELETE requests themselves live in src/lib/collectionControl.ts
+  // (already bounded by fetchWithTimeout) so this page and /colecciones —
+  // two surfaces rendering the same CollectionTabs — cannot drift apart on
+  // body shape or error mapping. Only the local state merge stays here.
+  // Both handlers hand the result back to CollectionTabs, which owns the
+  // Spanish failure copy and decides whether to keep the editor open. A
+  // swallowed failure here is what let a 401'd delete leave the card on
+  // screen with nothing but a console message.
+  const handleUpdateItem = async (
+    id: number,
+    updates: { condition: ConditionGrade; quantity?: number; notes?: string }
+  ): Promise<CollectionActionResult> => {
+    const result = await updateCollectionItemFields(id, updates);
+    if (result.success && result.item) {
+      const updated = result.item;
+      // Merged, not replaced: the server enriches the PUT response with the
+      // Stamp display columns (see updateCollectionItem in
+      // src/lib/db/collection.ts), and merging keeps that true even if a
+      // response ever arrives without one of them.
+      setCollectionItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+      );
     }
+    return result;
   };
 
-  const handleDeleteItem = async (id: number) => {
-    try {
-      const res = await fetch(`/api/collection?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        setCollectionItems((prev) => prev.filter((item) => item.id !== id));
-      }
-    } catch (err) {
-      console.error("Failed to delete item:", err);
+  const handleDeleteItem = async (id: number): Promise<CollectionActionResult> => {
+    const result = await deleteCollectionItemById(id);
+    if (result.success) {
+      setCollectionItems((prev) => prev.filter((item) => item.id !== id));
     }
+    return result;
   };
 
   const getStatusBadge = (status: OrderRecord["status"]) => {
@@ -360,11 +350,19 @@ export default function PerfilClient() {
         {/* Tab Content: Mi Inventario (3-Tab Collection) */}
         {activeTab === "coleccion" && (
           <div className="bg-zinc-900/60 border border-white/10 rounded-2xl p-6">
-            <CollectionTabs
-              items={collectionItems}
-              onUpdateCondition={handleUpdateCondition}
-              onDeleteItem={handleDeleteItem}
-            />
+            {collectionError ? (
+              <div className="text-center py-12 border border-dashed border-white/10 rounded-xl bg-zinc-900/30">
+                <AlertCircle className="mx-auto text-red-400 mb-2" size={24} />
+                <p className="text-zinc-400 text-sm font-medium">No se pudo cargar tu inventario</p>
+                <p className="text-zinc-600 text-xs mt-1">Revisa tu conexión e inténtalo de nuevo</p>
+              </div>
+            ) : (
+              <CollectionTabs
+                items={collectionItems}
+                onUpdateItem={handleUpdateItem}
+                onDeleteItem={handleDeleteItem}
+              />
+            )}
           </div>
         )}
 
@@ -389,6 +387,12 @@ export default function PerfilClient() {
             {loadingMatches ? (
               <div className="flex justify-center py-12">
                 <Loader2 size={24} className="text-blue-400 animate-spin" />
+              </div>
+            ) : matchesError ? (
+              <div className="text-center py-12 border border-dashed border-white/10 rounded-xl bg-zinc-900/30">
+                <AlertCircle className="mx-auto text-red-400 mb-2" size={24} />
+                <p className="text-zinc-400 text-sm font-medium">No se pudieron cargar tus coincidencias</p>
+                <p className="text-zinc-600 text-xs mt-1">Revisa tu conexión e inténtalo de nuevo</p>
               </div>
             ) : matchProposals.length === 0 ? (
               <div className="text-center py-12 border border-dashed border-white/10 rounded-xl bg-zinc-900/30">
@@ -446,41 +450,65 @@ export default function PerfilClient() {
         {/* Tab Content: Pedidos */}
         {activeTab === "pedidos" && (
           <div className="bg-zinc-900/60 border border-white/10 rounded-2xl p-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-zinc-400">
-                    <th className="py-3 px-4">N° Pedido</th>
-                    <th className="py-3 px-4">Fecha</th>
-                    <th className="py-3 px-4 text-center">Ítems</th>
-                    <th className="py-3 px-4">Pago</th>
-                    <th className="py-3 px-4">Total</th>
-                    <th className="py-3 px-4">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 text-sm">
-                  {orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="py-4 px-4 font-mono font-medium text-white">{order.id}</td>
-                      <td className="py-4 px-4 text-zinc-400 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <Clock size={12} className="text-zinc-500" />
-                          {order.date}
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-center font-medium text-zinc-300">{order.itemsCount}</td>
-                      <td className="py-4 px-4 text-zinc-400 text-xs">{getPaymentMethodLabel(order.paymentMethod)}</td>
-                      <td className="py-4 px-4 font-semibold text-emerald-400">S/. {order.totalAmount.toFixed(2)}</td>
-                      <td className="py-4 px-4">
-                        <span className={`inline-block px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${getStatusBadge(order.status)}`}>
-                          {order.status}
-                        </span>
-                      </td>
+            {loadingOrders ? (
+              <div className="flex justify-center py-12">
+                <Loader2 size={24} className="text-emerald-400 animate-spin" />
+              </div>
+            ) : ordersError ? (
+              <div className="text-center py-12 border border-dashed border-white/10 rounded-xl bg-zinc-900/30">
+                <AlertCircle className="mx-auto text-red-400 mb-2" size={24} />
+                <p className="text-zinc-400 text-sm font-medium">No se pudo cargar el historial de pedidos</p>
+                <p className="text-zinc-600 text-xs mt-1">Intenta recargar la página en unos momentos</p>
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-white/10 rounded-xl bg-zinc-900/30">
+                <ShoppingBag className="mx-auto text-zinc-600 mb-2" size={24} />
+                <p className="text-zinc-400 text-sm font-medium">Aún no tienes pedidos</p>
+                <p className="text-zinc-600 text-xs mt-1">Explora el catálogo para realizar tu primera compra</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-zinc-400">
+                      <th className="py-3 px-4">N° Pedido</th>
+                      <th className="py-3 px-4">Fecha</th>
+                      <th className="py-3 px-4 text-center">Ítems</th>
+                      <th className="py-3 px-4">Pago</th>
+                      <th className="py-3 px-4">Total</th>
+                      <th className="py-3 px-4">Estado</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-sm">
+                    {orders.map((order) => (
+                      <tr key={order.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-4 px-4 font-mono font-medium text-white">{order.id}</td>
+                        <td className="py-4 px-4 text-zinc-400 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={12} className="text-zinc-500" />
+                            {/* `created_at` is a raw SQLite DATETIME
+                                ("2026-08-02 15:04:05"); every sibling date
+                                cell renders toLocaleDateString(). */}
+                            {formatOrderDate(order.date)}
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-center font-medium text-zinc-300">{order.itemsCount}</td>
+                        <td className="py-4 px-4 text-zinc-400 text-xs">{getPaymentMethodLabel(order.paymentMethod)}</td>
+                        {/* Each order carries its OWN currency — persisted at
+                            creation time by src/lib/db/orders.ts `priceOrder`.
+                            Never assumed to all be the same currency. */}
+                        <td className="py-4 px-4 font-semibold text-emerald-400">{formatOrderMoney(order.totalAmount, order.currency)}</td>
+                        <td className="py-4 px-4">
+                          <span className={`inline-block px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${getStatusBadge(order.status)}`}>
+                            {order.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

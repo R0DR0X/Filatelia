@@ -30,6 +30,10 @@ export default function StampCard({ id, image, title, scott, price, isForSale = 
         id: id || `${title}-${scott}`,
         title,
         price,
+        // This card only ever renders a `Stamp.marketPriceUsd` value (see
+        // callers), which is USD by its own column name — hardcoded here
+        // for the same reason src/lib/db/orders.ts hardcodes it server-side.
+        currency: "USD",
         scott: scott || "N/A",
         image: isInvalidImage ? undefined : image,
         quantity: 1,

@@ -1401,7 +1401,43 @@ app.get('/analytics/stats', async (c) => {
 // ADMIN CRUD: stamps
 // ==========================================
 
-async function requireAdmin(c: any): Promise<any | null> {
+// Constant-time comparison over encoded bytes. Iterates the full length of
+// the longer input regardless of where (or whether) a mismatch occurs, so no
+// branch inside the loop depends on secret data — this must never contain an
+// early `return`/`break` on the first differing byte, which would leak the
+// position of the first mismatch (and, transitively, prefix information)
+// through timing.
+export function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const aBytes = enc.encode(a);
+  const bBytes = enc.encode(b);
+  const maxLen = Math.max(aBytes.length, bBytes.length);
+
+  // Length mismatches are folded into the accumulator instead of returning
+  // early, so a caller cannot distinguish "wrong length" from "right length,
+  // wrong content" by timing alone.
+  let mismatch = aBytes.length === bBytes.length ? 0 : 1;
+  for (let i = 0; i < maxLen; i++) {
+    const x = i < aBytes.length ? aBytes[i] : 0;
+    const y = i < bBytes.length ? bBytes[i] : 0;
+    mismatch |= x ^ y;
+  }
+  return mismatch === 0;
+}
+
+// Dual-accept: authorizes either (a) a service-to-service caller presenting
+// `X-Admin-Token` matching the `ADMIN_API_TOKEN` Worker secret (constant-time
+// compare), used by the Next admin proxy, or (b) the pre-existing
+// `fp_session`-cookie-based legacy admin checks, left behaviourally
+// unchanged. The service token never authorizes when `ADMIN_API_TOKEN` is
+// unset or empty in env — an empty header must never match an empty secret.
+export async function requireAdmin(c: any): Promise<any | null> {
+  const headerToken = c.req.header('X-Admin-Token');
+  const serviceToken = c.env.ADMIN_API_TOKEN;
+  if (headerToken && serviceToken && timingSafeEqual(headerToken, serviceToken)) {
+    return { id: 'service', role: 'admin', viaServiceToken: true };
+  }
+
   const authUser = await getAuthUser(c);
   if (!authUser) return null;
   if (authUser.role === 'admin' || authUser.email?.endsWith('@filateliaperuana.com')) return authUser;

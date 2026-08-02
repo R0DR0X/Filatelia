@@ -66,15 +66,20 @@ recorded as an explicit open decision in the spec, not a silent gap.
 
 ## Phase 3: Worker Dual-Accept (PR2)
 
-- [ ] 3.1 Wire vitest in `workers/filatelia-api` (devDependency + script)
-- [ ] 3.2 RED: `requireAdmin` accepts `X-Admin-Token`, rejects wrong/missing (constant-time)
-- [ ] 3.3 GREEN: dual-accept (service token OR legacy cookie) in `index.ts` `requireAdmin`
-- [ ] 3.4 Provision `ADMIN_API_TOKEN` secret (Worker + Pages)
+- [x] 3.1 Wire vitest in `workers/filatelia-api` (devDependency + script) — already done in commit `8409aca`; verified `package.json`'s `test` script and `vitest.config.mts` exist and run
+- [x] 3.2 RED: `requireAdmin` accepts `X-Admin-Token`, rejects wrong/missing (constant-time) — `workers/filatelia-api/test/admin-token.test.ts`
+- [x] 3.3 GREEN: dual-accept (service token OR legacy cookie) in `index.ts` `requireAdmin` — added `timingSafeEqual` + service-token branch, existing cookie/first-user/`@filateliaperuana.com` rules left unchanged
+- [x] 3.4 Provision `ADMIN_API_TOKEN` secret (Worker + Pages) — **operator action required, not executable by this agent (no wrangler/deploy access)**:
+  1. Generate a long random secret, e.g. `openssl rand -hex 32`.
+  2. Worker: `wrangler secret put ADMIN_API_TOKEN --config workers/filatelia-api/wrangler.toml` (paste the generated value). Do NOT add it to `wrangler.toml` as a `[vars]` entry — that would commit it to git (unlike the legacy `JWT_SECRET`, which is already flagged for removal in Phase 5, this one starts out correctly as a secret).
+  3. Pages (`filatelia-web`): set `ADMIN_API_TOKEN` as an encrypted environment variable in the Cloudflare Pages project settings (Production and Preview), same value as step 2.
+  4. Local dev: add `ADMIN_API_TOKEN=<same value>` to `filatelia-web/.env` (see `.env.example`, not committed) and to the Worker's local `.dev.vars` if/when one exists.
+  5. Verify with a manual authenticated request to a Worker `/admin/*` route bearing `X-Admin-Token` before relying on the proxy in prod.
 
 ## Phase 4: Admin Proxy + Client Migration (PR2/PR3)
 
-- [ ] 4.1 RED: proxy 403 without `role==="admin"`; forwards with `X-Admin-Token` when authorized
-- [ ] 4.2 GREEN: create `src/app/api/admin/[...path]/route.ts`
+- [x] 4.1 RED: proxy 403 without `role==="admin"`; forwards with `X-Admin-Token` when authorized — `filatelia-web/test/admin-proxy-api.test.ts`
+- [x] 4.2 GREEN: create `src/app/api/admin/[...path]/route.ts`
 - [ ] 4.3 RED: `lib/auth.ts` no longer reads/writes `fp_token`/`fp_user`
 - [ ] 4.4 GREEN: rewrite `src/lib/auth.ts` to call Next routes only
 - [ ] 4.5 RED: 7 admin clients + `BidModal.tsx` contain no `fp_token`/localStorage reads

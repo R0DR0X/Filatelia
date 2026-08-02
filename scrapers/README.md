@@ -85,6 +85,46 @@ Worker (`wrangler secret put ADMIN_API_TOKEN`, ver
 `openspec/changes/unified-session/tasks.md`, tarea 3.4). No lo definas en
 `wrangler.toml` ni lo comitees al repositorio.
 
+### 🔑 Otras credenciales (OpenRouter, DataImpulse, Colnect)
+
+Ningún scraper trae credenciales embebidas: todas se leen de variables de
+entorno y, si falta alguna, el script se detiene de inmediato con un mensaje
+explicando cuál falta — antes de arrancar el navegador o hacer la primera
+petición, para no gastar horas de crawl (y ancho de banda de proxy) contra un
+script que va a fallar en el primer request real.
+
+Copiá `scrapers/env.example` a `scrapers/.env`, completá los valores reales
+y exportalos en tu shell (o usá `source scrapers/.env` / `dotenv-cli`) antes
+de correr cualquier scraper:
+
+```bash
+cp scrapers/env.example scrapers/.env
+# editá scrapers/.env con los valores reales
+set -a && source scrapers/.env && set +a
+node scrapers/04-ai-enricher.mjs
+python3 scrapers/colnect_global_scraper_v3.py
+```
+
+| Variable | Usado por | Qué es |
+| --- | --- | --- |
+| `ADMIN_API_TOKEN` | scrapers Node y Python que escriben en `/import-stamp` | Token de admin del Worker (ver sección anterior) |
+| `OPENROUTER_API_KEY` | `04-ai-enricher.mjs` | API key de OpenRouter (https://openrouter.ai/keys) |
+| `DATAIMPULSE_HOST` | scrapers Python que usan proxy residencial | Host:puerto del gateway DataImpulse (dashboard.dataimpulse.com) |
+| `DATAIMPULSE_USER` | ídem | Usuario del proxy DataImpulse |
+| `DATAIMPULSE_PASS` | ídem | Password del proxy DataImpulse |
+| `COLNECT_USERNAME` | scrapers Python que hacen login en Colnect (`debug_login.py`, `refresh_cookies.py`, `vm_solve_anubis.py`) | Email/usuario de la cuenta de Colnect |
+| `COLNECT_PASSWORD` | ídem | Password de la cuenta de Colnect |
+
+Los helpers que implementan este chequeo "fail-fast" son
+`scrapers/lib/admin-token.mjs` (`requireAdminToken()`) para Node y
+`scrapers/scraper_env.py` (`require_env()` / `require_admin_token()`) para
+Python.
+
+**Nota sobre `scrapers/colnect_colab_scraper.py`, `scrapers/colnect_global_scraper.py`
+y `scrapers/repair_colnect_images.py`**: el proxy DataImpulse ahí es opcional
+(código heredado de Google Colab). Si no definís `DATAIMPULSE_HOST` el script
+sigue corriendo sin proxy premium, tal como antes.
+
 ---
 
 ## 🚀 4. Guía de Ejecución

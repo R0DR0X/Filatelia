@@ -2,12 +2,18 @@ import asyncio
 import json
 from playwright.async_api import async_playwright
 
+from scraper_env import require_env
+
 async def main():
+    # Fail fast on missing credentials before any network activity.
+    colnect_user = require_env("COLNECT_USERNAME", "Colnect account email/username")
+    colnect_pass = require_env("COLNECT_PASSWORD", "Colnect account password")
+
     async with async_playwright() as pw:
         proxy_config = {
-            "server": "http://gw.dataimpulse.com:823",
-            "username": "bafe165ec82f735291ea__sessid.images_session_vm",
-            "password": "cba7f2ea0d940de4"
+            "server": f"http://{require_env('DATAIMPULSE_HOST', 'DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)')}",
+            "username": f"{require_env('DATAIMPULSE_USER', 'DataImpulse proxy username (dashboard.dataimpulse.com)')}__sessid.images_session_vm",
+            "password": require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
         }
         browser = await pw.chromium.launch(
             headless=True,
@@ -42,8 +48,8 @@ async def main():
         print(f"Has username field: {has_user is not None}, Has password field: {has_pass is not None}")
         
         if has_user and has_pass:
-            await page.fill("#signin_username", "sinnombre31415@gmail.com")
-            await page.fill("#signin_password", "a3GRQ2HSyKsM7EjkT16pnUFXm5Bgcd")
+            await page.fill("#signin_username", colnect_user)
+            await page.fill("#signin_password", colnect_pass)
             await page.screenshot(path="/home/rodrigo/filatelia/scrapers/login_step2.png")
             
             print("Clicking signin button...")

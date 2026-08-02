@@ -3,6 +3,8 @@ import re
 import requests
 import httpx
 
+from scraper_env import require_env
+
 API_URL = "https://filatelia-api.rodrigopianto2005.workers.dev/query"
 
 def get_stamp_id_from_url(source_url: str) -> int | None:
@@ -16,6 +18,11 @@ def parse_cdn_path(image_url: str):
     return None, None, None
 
 async def main():
+    # Fail fast on missing credentials before any network activity.
+    dataimpulse_user = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
+    dataimpulse_pass = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
+    dataimpulse_host = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
+
     # Let's test a stamp we know exists and should have neighbors.
     # Japan 224556
     source_url = "https://colnect.com/en/stamps/stamp/224556-Completion_of_Ozaki_Memorial_Hall-Japan"
@@ -76,7 +83,7 @@ async def main():
         name_slug = parts[1].replace("_", "-").replace(" ", "-")
     print("Generated slug:", name_slug)
     
-    proxy_url = "http://bafe165ec82f735291ea:cba7f2ea0d940de4@gw.dataimpulse.com:823"
+    proxy_url = f"http://{dataimpulse_user}:{dataimpulse_pass}@{dataimpulse_host}"
     semaphore = asyncio.Semaphore(8) # Limit to 8 concurrent requests
     
     async def check_url(ctype, folder, idx, client):

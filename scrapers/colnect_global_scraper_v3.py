@@ -29,6 +29,8 @@ import requests
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
+from scraper_env import require_env, require_admin_token
+
 # ── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR   = Path(__file__).parent
 COOKIES_FILE = SCRIPT_DIR / "colnect_cookies.json"
@@ -42,9 +44,12 @@ API_URL      = "https://filatelia-api.rodrigopianto2005.workers.dev/import-stamp
 QUERY_URL    = "https://filatelia-api.rodrigopianto2005.workers.dev/query"
 
 # ── Proxy (DataImpulse residential User B - active) ─────────────────────────
-PROXY_SERVER = "gw.dataimpulse.com:823"
-PROXY_USER   = "ce2dd5be999d7e7e9a05"
-PROXY_PASS   = "b93d4b8e9a554c41"
+PROXY_SERVER = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
+PROXY_USER   = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
+PROXY_PASS   = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
+
+# ── Admin auth for /import-stamp ─────────────────────────────────────────────
+ADMIN_TOKEN = require_admin_token()
 
 # ── Concurrency ──────────────────────────────────────────────────────────────
 LISTING_WORKERS  = 4   # parallel listing-page workers
@@ -556,7 +561,7 @@ def send_batch_sync(stamps):
             res = requests.post(
                 API_URL,
                 json={"stamps": stamps},
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "X-Admin-Token": ADMIN_TOKEN},
                 timeout=30,
             )
             if res.status_code == 200:

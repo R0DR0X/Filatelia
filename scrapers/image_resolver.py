@@ -29,6 +29,8 @@ import time
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
+from scraper_env import require_env
+
 # --- Config ---
 API_URL       = "https://filatelia-api.rodrigopianto2005.workers.dev/query"
 COOKIES_FILE  = "scrapers/colnect_cookies_images.json"
@@ -41,7 +43,10 @@ NONE_LOGGED_VAL = "https://i.colnect.net/items/thumb/none_logged_image.jpg"
 
 # Generate a unique proxy session ID for this run to ensure a fresh, consistent IP
 SESSION_ID = "crawler_session_vm"
-PROXY_URL = f"http://ce2dd5be999d7e7e9a05__sessid.{SESSION_ID}:b93d4b8e9a554c41@gw.dataimpulse.com:823"
+DATAIMPULSE_USER = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
+DATAIMPULSE_PASS = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
+DATAIMPULSE_HOST = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
+PROXY_URL = f"http://{DATAIMPULSE_USER}__sessid.{SESSION_ID}:{DATAIMPULSE_PASS}@{DATAIMPULSE_HOST}"
 
 # CDN base for direct requests (works for public images)
 CDN_BASE = "https://i.colnect.net/b"
@@ -335,9 +340,9 @@ async def resolve_images():
 
     async with async_playwright() as pw:
         proxy_config = {
-            "server": "http://gw.dataimpulse.com:823",
-            "username": f"ce2dd5be999d7e7e9a05__sessid.{SESSION_ID}",
-            "password": "b93d4b8e9a554c41"
+            "server": f"http://{DATAIMPULSE_HOST}",
+            "username": f"{DATAIMPULSE_USER}__sessid.{SESSION_ID}",
+            "password": DATAIMPULSE_PASS
         }
         browser = await pw.chromium.launch(
             headless=True,

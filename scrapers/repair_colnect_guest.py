@@ -5,13 +5,15 @@ import requests
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
+from scraper_env import require_env
+
 API_URL = "https://filatelia-api.rodrigopianto2005.workers.dev/query"
 
 # Configuración del pool de proxies residenciales
 PROXY_CONFIG = {
-    "server": "http://gw.dataimpulse.com:823",
-    "username": "bafe165ec82f735291ea",
-    "password": "cba7f2ea0d940de4"
+    "server": f"http://{require_env('DATAIMPULSE_HOST', 'DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)')}",
+    "username": require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)"),
+    "password": require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
 }
 
 # Concurrencia de trabajadores

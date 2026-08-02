@@ -9,14 +9,16 @@ import json
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
+from scraper_env import require_env
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOCAL_DB = os.path.abspath(os.path.join(SCRIPT_DIR, "../crawler_progress.db"))
 
-# --- PROXY CONFIGURATION (NEW CREDENTIALS) ---
+# --- PROXY CONFIGURATION ---
 USE_PROXY = True
-PROXY_BASE = "gw.dataimpulse.com:823"
-PROXY_USER = "ce2dd5be999d7e7e9a05"
-PROXY_PASS = "b93d4b8e9a554c41"
+PROXY_BASE = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
+PROXY_USER = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
+PROXY_PASS = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
 
 # Target countries to discover new stamps for
 TARGET_COUNTRIES = [

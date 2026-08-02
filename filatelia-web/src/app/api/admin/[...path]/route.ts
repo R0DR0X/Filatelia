@@ -35,18 +35,26 @@ function isSafeSegment(segment: string): boolean {
   return !segment.includes("/") && !segment.includes("\\");
 }
 
+// Server-side only. Client-visible bodies stay opaque; these lines exist so
+// an operator can tell an ordinary permission denial apart from a
+// misconfiguration. Never log the session cookie or the service token.
+const LOG_PREFIX = "[admin-proxy]";
+
 async function requireAdminSession(request: NextRequest): Promise<NextResponse | null> {
   const sessionCookie = request.cookies.get("fp_session")?.value;
   if (!sessionCookie) {
+    console.warn(`${LOG_PREFIX} rejected: no session cookie present`);
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
 
   const payload = await verifySession(sessionCookie);
   if (!payload) {
+    console.warn(`${LOG_PREFIX} rejected: no session — cookie failed verification (missing/expired/invalid signature)`);
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
 
   if (payload.role !== "admin") {
+    console.warn(`${LOG_PREFIX} rejected: valid session with non-admin role`);
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -64,6 +72,7 @@ async function forward(
   if (!adminToken) {
     // Fail closed: never call the Worker's admin surface without a service
     // token, even for an already-authorized admin session.
+    console.error(`${LOG_PREFIX} rejected: ADMIN_API_TOKEN is not set in this environment`);
     return NextResponse.json({ error: "Admin proxy is not configured" }, { status: 500 });
   }
 
@@ -111,6 +120,18 @@ async function forward(
 
     const responseText = await workerResponse.text();
     const contentType = workerResponse.headers.get("content-type") || "application/json";
+
+    // We only reach this point for an already-verified admin session that was
+    // forwarded WITH a service token, and the Worker's admin surface is
+    // token-only — so a 403 here cannot be a role decision. It is the
+    // signature of an ADMIN_API_TOKEN skew between this environment and the
+    // Worker secret. Logged loudly because the client-visible body is
+    // deliberately identical to a legitimate denial.
+    if (workerResponse.status === 403) {
+      console.error(
+        `${LOG_PREFIX} worker returned 403 despite a forwarded service token — probable ADMIN_API_TOKEN token mismatch between Pages env and Worker secret (path: /admin/${path.join("/")})`
+      );
+    }
 
     return new NextResponse(responseText, {
       status: workerResponse.status,

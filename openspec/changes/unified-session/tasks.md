@@ -164,9 +164,160 @@ Both migrated admin-UI call sites (`analitica/page.tsx`, `DashboardClient.tsx`
 
 ## Phase 5: Worker Auth Removal (PR4, last)
 
-- [ ] 5.1 RED: `/auth/*` returns 404 after deletion
-- [ ] 5.2 GREEN: delete `/auth/register|login|logout|me`, JWT helpers, `hashPassword`/`verifyPassword`; `requireAdmin` becomes token-only; remove `JWT_SECRET` from `wrangler.toml`
-- [ ] 5.3 Full regression: `filatelia-web` vitest, `workers/filatelia-api` vitest, root `node --test test/*.test.mjs`
+- [x] 5.1 RED: `/auth/*` returns 404 after deletion — `workers/filatelia-api/test/auth-removal.test.ts`; also RED (pre-deletion) two regression tests proving a forged `@filateliaperuana.com` cookie and a forged cookie against a single-row `User` table both currently grant admin via `requireAdmin`
+- [x] 5.2 GREEN: deleted `/auth/register|login|logout|me` and the now-dead helpers `hashPassword`, `verifyPassword`, `createJWT`, `verifyJWT`, `getAuthUser`, `setSessionCookie`, `clearSessionCookie` (all confirmed dead via grep before removal — see deviation note below); `requireAdmin` is now token-only (`X-Admin-Token` constant-time compare against `ADMIN_API_TOKEN`, nothing else — the legacy cookie path, the `@filateliaperuana.com` email rule, and the "sole `User` row is admin" rule are gone); removed `JWT_SECRET` from `wrangler.toml` and from the `Bindings` type in `src/index.ts` (that type is where the Worker declares its env — this repo has no separate `src/types.ts` `Env` export); added `ADMIN_API_TOKEN` to that same `Bindings` type (was previously read via `c.env.ADMIN_API_TOKEN` without a declared type)
+- [x] 5.3 Full regression: `filatelia-web` vitest (120 passed / 1 pre-existing failure needing live D1 — unchanged baseline), `workers/filatelia-api` vitest (28/28, was 21/21 + 7 new tests), root `node --test test/*.test.mjs` (43/43), `filatelia-web` `npx tsc --noEmit` (6 pre-existing errors, zero new)
+
+### Deviation note: `JWT_SECRET` lived in the `Bindings` type in `src/index.ts`, not in a separate `src/types.ts` `Env`
+
+The design/task text referred to "the `Env` type in `src/types.ts`". This
+Worker has no such type — `src/types.ts` only exports `QueryRequest`,
+`MatchResult`, `QueryResponse` (request/response DTOs). The actual Cloudflare
+bindings type is `Bindings` in `src/index.ts:5-16`, used as `Hono<{
+Bindings: Bindings }>`. `JWT_SECRET` was removed from there instead, and
+`ADMIN_API_TOKEN` was added to the same place (it was already read via
+`c.env.ADMIN_API_TOKEN` in `requireAdmin` but had never been declared in the
+type — TypeScript widened `c` to `any` there so it type-checked anyway;
+declaring it now documents the real contract).
+
+### Deviation note: dead-code confirmation via grep before deletion
+
+Before deleting each helper, `grep -rn` across `src/` and `test/` confirmed
+zero remaining callers once the four `/auth/*` routes were gone:
+
+- `hashPassword` — only caller was `/auth/register`.
+- `verifyPassword` — only caller was `/auth/login`.
+- `createJWT` — only callers were `/auth/register` and `/auth/login`.
+- `verifyJWT` — only caller was `getAuthUser`.
+- `getAuthUser` — exactly two callers, as the orchestrator's pre-flight
+  mapping predicted: `/auth/me` (deleted) and `requireAdmin`'s legacy cookie
+  branch (deleted). No other caller existed anywhere in `src/` or `test/`.
+- `setSessionCookie` / `clearSessionCookie` — only callers were the deleted
+  `/auth/register|login|logout` routes.
+
+Nothing was found to still have a live caller; no helper was kept.
+
+### CRITICAL — Deployment Runbook (read before deploying this Worker)
+
+Deploying the changes in this PR makes `requireAdmin` **token-only**: the
+legacy cookie-based admin paths (including the two privilege-escalation
+rules) no longer exist. The *only* remaining path to any `/admin/*` Worker
+route is: browser → Next proxy (`filatelia-web/src/app/api/admin/[...path]/route.ts`)
+→ verifies `fp_session` has `role === "admin"` → forwards to the Worker with
+`X-Admin-Token`. That `role` claim is resolved from the `Role`/`UserRole`
+join at session-issuance time.
+
+**If this Worker is deployed before the preconditions below are satisfied,
+the site owner is locked out of `/admin` with no recovery path through the
+UI**, because there will be no way to obtain an `fp_session` whose `role` is
+`"admin"`, and the Worker will reject everything that isn't a valid
+`X-Admin-Token`.
+
+Required order:
+
+1. **Confirm PR1–PR3 are already live and verified in prod.** This PR
+   (`requireAdmin` token-only) must be the LAST deploy in the chain — do not
+   deploy it standalone or out of order. Verify:
+   - Next app (`filatelia-web`) is serving `/api/auth/login|register|logout|google`
+     and `/api/admin/[...path]` from the branches shipped in PR1–PR3.
+   - `APP_SECRET` is set in the Next/Pages environment (prod + preview).
+2. **Run migration `filatelia-web/db/migrations/0007_seed_admin_role.sql`
+   against remote D1** — this is currently NOT executed (task 0.2 delivered
+   the migration but explicitly did not run it, per this agent's hard
+   constraint against touching prod D1). It is idempotent and safe to run
+   more than once. An operator with `wrangler`/D1 prod credentials must run
+   it. Verify afterward with a read-only query that the admin `User` row has
+   a `UserRole` row joined to `Role('admin')`.
+3. **Provision `ADMIN_API_TOKEN`** on both sides (see task 3.4 for the exact
+   steps): `wrangler secret put ADMIN_API_TOKEN` on the Worker, and the same
+   value as an encrypted Pages environment variable for `filatelia-web`.
+   Verify with a manual authenticated request to a Worker `/admin/*` route
+   bearing `X-Admin-Token` BEFORE deploying this PR's `requireAdmin` change.
+4. **Only once 1–3 are verified, deploy this PR's Worker build**
+   (`requireAdmin` token-only, `/auth/*` gone, `JWT_SECRET` gone).
+5. **Post-deploy smoke test**: log in as the admin user through the Next app
+   UI, confirm `/admin` loads and at least one admin action (e.g. `GET
+   /admin/stamps` through the proxy) succeeds.
+6. **Rotate/remove `JWT_SECRET` from the deployed Worker.** It was committed
+   in plaintext in `wrangler.toml` (value
+   `fp-secret-2024-filatelia-peruana-secure`) for the lifetime of this
+   repository and MUST be treated as compromised — anyone with repo access
+   could forge a legacy `fp_session` cookie with it (this is exactly what
+   this PR's regression tests demonstrate). Since this PR removes it from
+   the `Bindings` type and the code path that read it, no code change is
+   needed to stop using it — but if a previous Worker deploy still has it as
+   a live `[vars]` value or Worker secret, an operator must explicitly clear
+   it (`wrangler secret delete JWT_SECRET` if it was ever set as a secret,
+   or redeploy from this branch so the `[vars]` entry is gone). This is a
+   required operator action, not something this agent can perform (no
+   `wrangler`/deploy access).
+
+### Recovery if deployed out of order (steps 2–3 skipped before step 4)
+
+Symptom: the Worker's `/admin/*` routes reject everything without a matching
+`X-Admin-Token`, and there is no cookie fallback to recover through, so
+`/admin` is unusable.
+
+**Do NOT roll the Worker back as a stopgap.** Rolling back to the PR2/PR3
+build is *not* a neutral undo — it re-opens the exact vulnerability this PR
+closes:
+
+- Worker `[vars]` are bundled per deployment, not resolved from a separate
+  secret store. Redeploying the old build therefore redeploys
+  `JWT_SECRET = "fp-secret-2024-filatelia-peruana-secure"` as a plaintext
+  `[vars]` entry, restoring a secret that has been readable by anyone with
+  repository access for the lifetime of this repo (see step 6).
+- That old build also restores the legacy `fp_session` cookie path that
+  *trusts* that secret, plus the two privilege-escalation rules it carried
+  (`@filateliaperuana.com` email suffix ⇒ admin, and "if `User` has exactly
+  one row, that row is admin"). Anyone holding the compromised secret can
+  forge an admin session — this is precisely the admin-takeover path the
+  regression tests in `workers/filatelia-api/test/auth-removal.test.ts`
+  exist to prove closed.
+
+A rollback is permissible ONLY if, *before* the old build goes live, either
+(i) `JWT_SECRET` has been rotated to a fresh value not present in any commit
+and the old build is redeployed with that new value, or (ii) the legacy
+cookie path is provably unreachable (e.g. the Worker is not publicly
+routable). If neither holds, do not roll back — use the break-glass below,
+which does not depend on the compromised secret at all.
+
+**Break-glass (preferred, no rollback, no compromised secret).** The
+operator already has `wrangler` access to D1 and to Worker secrets, which is
+everything this needs. In order:
+
+1. **Provision `ADMIN_API_TOKEN` on the Worker.** Generate a fresh random
+   value (e.g. `openssl rand -hex 32`) and run
+   `wrangler secret put ADMIN_API_TOKEN` against the Worker. This takes
+   effect without redeploying, so the current (safe) build stays live.
+2. **Set the same value as an encrypted Pages environment variable** named
+   `ADMIN_API_TOKEN` for `filatelia-web` (prod, and preview if used), then
+   redeploy/restart the Pages project so it picks the value up. The two
+   values must match exactly — a skew produces a 403 on every admin action
+   that is byte-identical to a legitimate denial (see the server-side logs
+   added for this: `requireAdmin: rejected — …` in the Worker and
+   `[admin-proxy] …` in the Next route).
+3. **Verify the Worker hop in isolation**, before involving the browser:
+   `curl -s -o /dev/null -w '%{http_code}' -H "X-Admin-Token: <value>" \
+   https://<worker-host>/admin/stamps` — expect a non-403 status. A 403 here
+   means step 1/2 disagree; fix that before continuing.
+4. **Run migration `filatelia-web/db/migrations/0007_seed_admin_role.sql`
+   against remote D1** (`wrangler d1 execute <db> --remote --file=…`). It is
+   idempotent. This is what makes the admin's `fp_session` carry
+   `role: "admin"`, which is what the Next proxy gates on. Note the Worker
+   itself does not need `Role`/`UserRole` to exist — only the proxy does, to
+   decide whether to forward at all.
+5. **Verify the grant read-only**: confirm the admin `User` row now has a
+   `UserRole` row joined to `Role('admin')`.
+6. **Re-log-in through the Next app UI** so a fresh session cookie is issued
+   carrying the new role claim, then re-run step 5 of the deploy order
+   (`/admin` loads, one admin action succeeds).
+
+Steps 1–3 alone restore the Worker hop; steps 4–6 restore the operator's own
+admin session. Neither touches `JWT_SECRET`, and neither requires reopening
+the legacy cookie path. Whatever the recovery route, step 6 of the deploy
+order (rotate/remove `JWT_SECRET` from every deployed Worker version) remains
+mandatory and is not satisfied by any of the above.
 
 Open product questions — RESOLVED during PR1 apply: session lifetime is 30 days
 with sliding renewal (see spec.md / design.md Open Decisions); registration is

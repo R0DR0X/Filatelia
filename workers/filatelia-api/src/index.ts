@@ -12,7 +12,7 @@ type Bindings = {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   OPENROUTER_API_KEY: string;
-  JWT_SECRET: string;
+  ADMIN_API_TOKEN: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -1047,185 +1047,17 @@ app.post('/import-stamp', importStampHandler);
 app.post('/admin/import-stamp', importStampHandler);
 
 // ==========================================
-// AUTH HELPERS
-// ==========================================
-
-async function hashPassword(password: string): Promise<string> {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 }, keyMaterial, 256);
-  const hashArr = Array.from(new Uint8Array(bits));
-  const saltArr = Array.from(salt);
-  return saltArr.map(b => b.toString(16).padStart(2,'0')).join('') + ':' + hashArr.map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [saltHex, hashHex] = stored.split(':');
-  const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000 }, keyMaterial, 256);
-  const attempt = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2,'0')).join('');
-  return attempt === hashHex;
-}
-
-async function createJWT(payload: object, secret: string): Promise<string> {
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body = btoa(JSON.stringify({ ...payload, iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000) + 60*60*24*7 }));
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`${header}.${body}`));
-  const sigStr = btoa(String.fromCharCode(...new Uint8Array(sig)));
-  return `${header}.${body}.${sigStr}`;
-}
-
-async function verifyJWT(token: string, secret: string): Promise<any | null> {
-  try {
-    const [header, body, sig] = token.split('.');
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
-    const valid = await crypto.subtle.verify('HMAC', key, Uint8Array.from(atob(sig), c => c.charCodeAt(0)), enc.encode(`${header}.${body}`));
-    if (!valid) return null;
-    const payload = JSON.parse(atob(body));
-    if (payload.exp < Math.floor(Date.now()/1000)) return null;
-    return payload;
-  } catch { return null; }
-}
-
-async function getAuthUser(c: any): Promise<any | null> {
-  const cookie = c.req.header('Cookie') || '';
-  const match = cookie.match(/fp_session=([^;]+)/);
-  if (!match) return null;
-  const token = decodeURIComponent(match[1]);
-  const secret = c.env.JWT_SECRET || 'fp-secret-2024-filatelia-peruana-secure';
-  const payload = await verifyJWT(token, secret);
-  if (!payload) return null;
-  return payload;
-}
-
-function setSessionCookie(c: any, token: string) {
-  c.header('Set-Cookie', `fp_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800`);
-}
-
-function clearSessionCookie(c: any) {
-  c.header('Set-Cookie', `fp_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
-}
-
-// ==========================================
-// AUTH ENDPOINTS
-// ==========================================
-
-app.post('/auth/register', async (c) => {
-  try {
-    const { name, email, password } = await c.req.json();
-    if (!name || !email || !password) {
-      return c.json({ success: false, error: 'name, email and password are required' }, 400);
-    }
-    if (password.length < 6) {
-      return c.json({ success: false, error: 'Password must be at least 6 characters' }, 400);
-    }
-
-    // Check email uniqueness
-    const existing = await c.env.DB.prepare('SELECT id FROM User WHERE email = ?').bind(email).first();
-    if (existing) {
-      return c.json({ success: false, error: 'Email already registered' }, 409);
-    }
-
-    const userId = crypto.randomUUID();
-    const hashed = await hashPassword(password);
-
-    await c.env.DB.prepare(
-      `INSERT INTO User (id, name, email, password, createdAt) VALUES (?, ?, ?, ?, datetime('now'))`
-    ).bind(userId, name, email, hashed).run();
-
-    // Assign 'user' role if it exists
-    try {
-      const role = await c.env.DB.prepare(`SELECT id FROM Role WHERE name = 'user'`).first() as any;
-      if (role) {
-        await c.env.DB.prepare(
-          `INSERT OR IGNORE INTO UserRole (id, userId, roleId) VALUES (?, ?, ?)`
-        ).bind(crypto.randomUUID(), userId, role.id).run();
-      }
-    } catch (_) { /* Role table may not exist yet */ }
-
-    const secret = c.env.JWT_SECRET || 'fp-secret-2024-filatelia-peruana-secure';
-    const token = await createJWT({ sub: userId, email, name }, secret);
-
-    setSessionCookie(c, token);
-    return c.json({ success: true, user: { id: userId, name, email } }, 201);
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
-  }
-});
-
-app.post('/auth/login', async (c) => {
-  try {
-    const { email, password } = await c.req.json();
-    if (!email || !password) {
-      return c.json({ success: false, error: 'email and password are required' }, 400);
-    }
-
-    const user = await c.env.DB.prepare(
-      `SELECT id, name, email, password FROM User WHERE email = ?`
-    ).bind(email).first() as any;
-
-    if (!user) {
-      return c.json({ success: false, error: 'Invalid credentials' }, 401);
-    }
-
-    const valid = await verifyPassword(password, user.password);
-    if (!valid) {
-      return c.json({ success: false, error: 'Invalid credentials' }, 401);
-    }
-
-    // Get role
-    let role = 'user';
-    try {
-      const roleRow = await c.env.DB.prepare(
-        `SELECT r.name FROM UserRole ur JOIN Role r ON ur.roleId = r.id WHERE ur.userId = ? LIMIT 1`
-      ).bind(user.id).first() as any;
-      if (roleRow) role = roleRow.name;
-    } catch (_) {}
-
-    const secret = c.env.JWT_SECRET || 'fp-secret-2024-filatelia-peruana-secure';
-    const token = await createJWT({ sub: user.id, email: user.email, name: user.name, role }, secret);
-
-    setSessionCookie(c, token);
-    return c.json({ success: true, user: { id: user.id, name: user.name, email: user.email, role } });
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
-  }
-});
-
-app.post('/auth/logout', async (c) => {
-  clearSessionCookie(c);
-  return c.json({ success: true });
-});
-
-app.get('/auth/me', async (c) => {
-  try {
-    const payload = await getAuthUser(c);
-    if (!payload) return c.json({ success: false, error: 'Unauthorized' }, 401);
-
-    const user = await c.env.DB.prepare(
-      `SELECT id, name, email FROM User WHERE id = ?`
-    ).bind(payload.sub).first() as any;
-
-    if (!user) return c.json({ success: false, error: 'User not found' }, 404);
-
-    return c.json({ success: true, user });
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
-  }
-});
-
-// ==========================================
 // ADMIN: seed-countries
 // ==========================================
 
+// Bulk-inserts into `Country`. Gated by `requireAdmin` exactly like every
+// other `/admin/*` route: until this guard existed, any unauthenticated
+// caller reaching the Worker directly could mutate the catalog.
 app.post('/admin/seed-countries', async (c) => {
   try {
+    const admin = await requireAdmin(c);
+    if (!admin) return c.json({ success: false, error: 'Forbidden' }, 403);
+
     const countries: Array<{ code: string; nameEs: string; nameEn: string; continent: string }> = [
       { code: 'AF', nameEs: 'Afganistán', nameEn: 'Afghanistan', continent: 'Asia' },
       { code: 'AI', nameEs: 'Anguila', nameEn: 'Anguilla', continent: 'America' },
@@ -1434,12 +1266,28 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-// Dual-accept: authorizes either (a) a service-to-service caller presenting
-// `X-Admin-Token` matching the `ADMIN_API_TOKEN` Worker secret (constant-time
-// compare), used by the Next admin proxy, or (b) the pre-existing
-// `fp_session`-cookie-based legacy admin checks, left behaviourally
-// unchanged. The service token never authorizes when `ADMIN_API_TOKEN` is
-// unset or empty in env — an empty header must never match an empty secret.
+// Token-only: the sole way to authorize as admin is a service-to-service
+// caller presenting `X-Admin-Token` matching the `ADMIN_API_TOKEN` Worker
+// secret (constant-time compare), used by the Next admin proxy. The Worker
+// no longer authenticates identities itself (see the deleted `/auth/*`
+// routes and `getAuthUser`) — the Next app is the sole session authority.
+//
+// This deliberately removes two legacy privilege-escalation rules that used
+// to live here: any identity whose email ended in `@filateliaperuana.com`,
+// and "if `User` has exactly one row, that row is admin". Both are covered
+// by regression tests in test/auth-removal.test.ts.
+//
+// The service token never authorizes when `ADMIN_API_TOKEN` is unset or
+// empty in env — an empty header must never match an empty secret.
+//
+// Every rejection is logged server-side with the *reason* (header absent vs.
+// present-but-mismatched vs. secret not configured), because callers only
+// ever see an opaque 403: without this trace an `ADMIN_API_TOKEN` skew
+// between the Worker secret and the Next proxy's env var is
+// indistinguishable from a legitimate permission denial. The token value —
+// header or secret — is never logged, not even a prefix, since a prefix
+// would hand an attacker with log access exactly the material the
+// constant-time compare exists to protect.
 export async function requireAdmin(c: any): Promise<any | null> {
   const headerToken = c.req.header('X-Admin-Token');
   const serviceToken = c.env.ADMIN_API_TOKEN;
@@ -1447,14 +1295,13 @@ export async function requireAdmin(c: any): Promise<any | null> {
     return { id: 'service', role: 'admin', viaServiceToken: true };
   }
 
-  const authUser = await getAuthUser(c);
-  if (!authUser) return null;
-  if (authUser.role === 'admin' || authUser.email?.endsWith('@filateliaperuana.com')) return authUser;
-  // First user rule
-  try {
-    const cnt = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM User').first() as any;
-    if (cnt?.cnt === 1) return authUser;
-  } catch (_) {}
+  if (!serviceToken) {
+    console.warn('requireAdmin: rejected — ADMIN_API_TOKEN is not configured on this Worker');
+  } else if (!headerToken) {
+    console.warn('requireAdmin: rejected — X-Admin-Token header absent');
+  } else {
+    console.warn('requireAdmin: rejected — X-Admin-Token present but mismatched with ADMIN_API_TOKEN');
+  }
   return null;
 }
 

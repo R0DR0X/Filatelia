@@ -4,7 +4,12 @@ compatibility_date = "2024-04-03"
 
 [vars]
 SUPABASE_URL = "https://tshatwvvkworsogjfjyj.supabase.co"
-JWT_SECRET = "fp-secret-2024-filatelia-peruana-secure"
+# JWT_SECRET removed (2026-08): the Worker no longer authenticates identities
+# itself; the Next app is the sole session authority (see
+# openspec/changes/unified-session). This value was committed in plaintext
+# and must be treated as COMPROMISED — see the deployment runbook in
+# openspec/changes/unified-session/tasks.md for the required operator
+# rotation/removal steps on the deployed Worker.
 
 # Cloudflare D1 Database binding
 [[d1_databases]]

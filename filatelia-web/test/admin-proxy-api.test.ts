@@ -198,3 +198,111 @@ describe("GET/POST /api/admin/[...path] proxy", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+// Post-PR4 the Worker has no admin fallback path, so an `ADMIN_API_TOKEN`
+// value mismatch between the Pages env var and the Worker secret fails every
+// admin action with a 403 that is indistinguishable, from the client, from a
+// legitimate "you are not an admin". The proxy must therefore record
+// server-side which gate rejected, and must flag the specific
+// "we sent a token and still got 403" signature. Client-visible bodies must
+// not become any more informative.
+describe("/api/admin/[...path] proxy observability", () => {
+  afterEach(() => {
+    setAdminToken(undefined);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function captureLogs() {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    return () =>
+      [...warn.mock.calls, ...error.mock.calls].map((call) => call.map(String).join(" ")).join("\n");
+  }
+
+  it("logs the missing-session gate without changing the 401 body", async () => {
+    setAdminToken("service-secret-token");
+    const logs = captureLogs();
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", undefined);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Unauthenticated" });
+    expect(logs()).toContain("no session");
+  });
+
+  it("logs the non-admin-role gate without changing the 403 body", async () => {
+    setAdminToken("service-secret-token");
+    const logs = captureLogs();
+    const cookie = await signSession({ id: "usr_1", email: "u@example.com", role: "collector" });
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Forbidden" });
+    expect(logs()).toContain("non-admin role");
+  });
+
+  it("logs the missing-env-token gate without changing the 500 body", async () => {
+    setAdminToken(undefined);
+    const logs = captureLogs();
+    const cookie = await signSession({ id: "usr_1", email: "admin@example.com", role: "admin" });
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Admin proxy is not configured" });
+    expect(logs()).toContain("ADMIN_API_TOKEN is not set");
+  });
+
+  it("flags a Worker 403 received despite having sent a service token, without altering the passthrough body", async () => {
+    setAdminToken("service-secret-token");
+    const logs = captureLogs();
+    const cookie = await signSession({ id: "usr_1", email: "admin@example.com", role: "admin" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: "Forbidden" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        })
+      )
+    );
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(403);
+    // Passthrough body is byte-identical to what the Worker returned.
+    expect(await res.text()).toBe(JSON.stringify({ success: false, error: "Forbidden" }));
+
+    const logged = logs();
+    expect(logged).toContain("token mismatch");
+    // The token value itself must never be logged.
+    expect(logged).not.toContain("service-secret-token");
+  });
+
+  it("logs nothing on a successful forwarded request", async () => {
+    setAdminToken("service-secret-token");
+    const logs = captureLogs();
+    const cookie = await signSession({ id: "usr_1", email: "admin@example.com", role: "admin" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      )
+    );
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(200);
+    expect(logs()).toBe("");
+  });
+});

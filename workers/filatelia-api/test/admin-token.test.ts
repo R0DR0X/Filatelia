@@ -1,20 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { SELF } from 'cloudflare:test';
 import { requireAdmin } from '../src/index';
 
-// `requireAdmin` (src/index.ts) must additionally accept a service-to-service
-// caller (the Next admin proxy) presenting `X-Admin-Token` that matches the
-// `ADMIN_API_TOKEN` Worker secret, compared in constant time. This must be
-// purely additive: it must never disable or change the existing
-// `fp_session`-cookie-based legacy admin checks. `ADMIN_API_TOKEN` is set to
-// a known test value in vitest.config.mts for this suite.
+// `requireAdmin` (src/index.ts) is token-only: it accepts a
+// service-to-service caller (the Next admin proxy) presenting
+// `X-Admin-Token` that matches the `ADMIN_API_TOKEN` Worker secret, compared
+// in constant time, and rejects everything else. The legacy
+// `fp_session`-cookie-based admin checks (and the privilege-escalation rules
+// they carried) were deleted — see test/auth-removal.test.ts for that
+// regression coverage. `ADMIN_API_TOKEN` is set to a known test value in
+// vitest.config.mts for this suite.
 //
 // `/admin/stamps` is used as the representative `/admin/*` route.
 
 const ADMIN_ROUTE = 'http://worker/admin/stamps';
 const VALID_TOKEN = 'test-admin-service-token-0123456789';
 
-describe('requireAdmin service token dual-accept', () => {
+describe('requireAdmin service token only (no cookie fallback)', () => {
   // NOTE: this suite's pool has no D1 migrations, so `/admin/stamps` answers
   // 500 (`no such table: Stamp`) even when authorization succeeds. The HTTP
   // tests below can therefore only prove the *negative* (a 403 rejection);
@@ -36,10 +38,40 @@ describe('requireAdmin service token dual-accept', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rejects a request with no X-Admin-Token and no session cookie (falls through to legacy cookie logic)', async () => {
+  it('rejects a request with no X-Admin-Token (there is no other admin path anymore)', async () => {
     const res = await SELF.fetch(ADMIN_ROUTE);
 
     expect(res.status).toBe(403);
+  });
+});
+
+// `/admin/seed-countries` bulk-inserts into `Country`. It must be gated by
+// the same token-only `requireAdmin` as every other `/admin/*` route: an
+// unauthenticated caller reaching the Worker directly must never be able to
+// mutate the catalog.
+describe('POST /admin/seed-countries authorization', () => {
+  it('rejects an unauthenticated POST with 403 and never touches the database', async () => {
+    const res = await SELF.fetch('http://worker/admin/seed-countries', { method: 'POST' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a POST bearing a wrong X-Admin-Token with 403', async () => {
+    const res = await SELF.fetch('http://worker/admin/seed-countries', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': 'wrong-token' },
+    });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('does not reject with 403 a POST bearing the correct X-Admin-Token', async () => {
+    const res = await SELF.fetch('http://worker/admin/seed-countries', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': VALID_TOKEN },
+    });
+
+    expect(res.status).not.toBe(403);
   });
 });
 
@@ -74,6 +106,64 @@ describe('requireAdmin service token happy path (unit level)', () => {
     );
 
     expect(admin).toBeNull();
+  });
+});
+
+// Post-PR4 there is no admin fallback path, so an `ADMIN_API_TOKEN` mismatch
+// between the Worker secret and the Pages env var fails 100% of admin actions
+// with a 403 that is byte-identical to a legitimate permission denial. The
+// Worker must therefore leave a server-side trace distinguishing "no header"
+// from "header present but mismatched" — without ever logging the token value
+// or any prefix of it.
+describe('requireAdmin service-token failure logging', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('logs an absent-header rejection without any token material', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await requireAdmin(stubContext({}, { ADMIN_API_TOKEN: VALID_TOKEN }));
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const logged = warn.mock.calls[0].map(String).join(' ');
+    expect(logged).toContain('absent');
+    expect(logged).not.toContain(VALID_TOKEN);
+    expect(logged).not.toContain(VALID_TOKEN.slice(0, 6));
+  });
+
+  it('logs a mismatched-header rejection distinctly, without any token material', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await requireAdmin(stubContext({ 'X-Admin-Token': 'wrong-token' }, { ADMIN_API_TOKEN: VALID_TOKEN }));
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const logged = warn.mock.calls[0].map(String).join(' ');
+    expect(logged).toContain('mismatch');
+    expect(logged).not.toContain('wrong-token');
+    expect(logged).not.toContain(VALID_TOKEN);
+    expect(logged).not.toContain(VALID_TOKEN.slice(0, 6));
+  });
+
+  it('logs an unconfigured-secret rejection distinctly', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await requireAdmin(stubContext({ 'X-Admin-Token': 'anything' }, {}));
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const logged = warn.mock.calls[0].map(String).join(' ');
+    expect(logged).toContain('not configured');
+    expect(logged).not.toContain('anything');
+  });
+
+  it('logs nothing on the happy path', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await requireAdmin(stubContext({ 'X-Admin-Token': VALID_TOKEN }, { ADMIN_API_TOKEN: VALID_TOKEN }));
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   });
 });
 

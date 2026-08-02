@@ -1,17 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/session";
+import { resolveUserRole } from "@/lib/db/users";
 
 // Session-gated proxy in front of the Worker's `/admin/*` routes. The
 // browser never talks to the Worker directly for admin actions and never
 // holds a Worker-shaped credential: this route verifies the httpOnly
-// `fp_session` cookie, checks `role === "admin"`, and — only then —
+// `fp_session` cookie, re-resolves the role from D1, and — only then —
 // forwards the request server-to-server to the Worker with a service
 // token (`X-Admin-Token`) that never reaches the client.
 //
 // Status code convention (kept consistent across this route): no session
 // cookie, or a cookie that fails verification (missing/expired/invalid
-// signature) -> 401 Unauthenticated. A valid session whose role is not
-// "admin" -> 403 Forbidden.
+// signature) -> 401 Unauthenticated. A valid session whose resolved role is
+// not "admin" -> 403 Forbidden.
+//
+// AUTHORITY: `payload.role` on the session token is NEVER trusted for this
+// decision. It is baked in at login/last-renewal and can be up to
+// SESSION_TTL_SECONDS (30 days) stale under sliding renewal — a revoked
+// admin (their UserRole row deleted) would otherwise keep admin access, and
+// every renewal would extend that. This route always calls
+// `resolveUserRole(payload.id)` and gates on the live D1 result instead.
+// This is the actual admin-action surface and its traffic is tiny, so one
+// extra D1 read per admin request is the right trade. `src/middleware.ts`'s
+// claim check is only a cheap pre-filter, not the authority — see its
+// comment. If the D1 read itself throws (binding missing, database
+// unreachable) or exceeds ROLE_RESOLUTION_TIMEOUT_MS, this route fails
+// CLOSED with 500 and never forwards to the Worker; it never falls back to
+// the token claim.
 export const runtime = "edge";
 
 const WORKER_API_URL =
@@ -25,6 +40,42 @@ const WORKER_API_URL =
 // own request budget. On timeout we answer 504 so the admin UI can tell an
 // upstream stall apart from a generic proxy failure.
 const WORKER_FETCH_TIMEOUT_MS = 15_000;
+
+// Same rationale as the Worker hop above, applied to the authoritative D1
+// role lookup: a slow dependency must never hold an edge invocation open
+// indefinitely. This is a single indexed lookup on UserRole/Role (one row,
+// primary-key-shaped predicate), so it is either fast or unhealthy — 3s is
+// two orders of magnitude above its expected latency yet far below the 15s
+// Worker budget, and leaves the rest of that budget for the hop itself when
+// the lookup is merely sluggish. A timeout is treated exactly like a D1
+// error: fail CLOSED with 500, never forward to the Worker, never fall back
+// to the token claim.
+const ROLE_RESOLUTION_TIMEOUT_MS = 3_000;
+
+/** Marks "D1 is slow/hung" so it can be logged apart from "D1 is broken". */
+class RoleResolutionTimeoutError extends Error {
+  constructor() {
+    super(`Role resolution exceeded ${ROLE_RESOLUTION_TIMEOUT_MS}ms`);
+    this.name = "RoleResolutionTimeoutError";
+  }
+}
+
+// A pending D1 query cannot be aborted from here (the binding takes no
+// signal), so the bound is enforced on the wait, not on the query: the
+// orphaned promise is simply no longer awaited.
+async function resolveUserRoleBounded(userId: string): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      resolveUserRole(userId),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new RoleResolutionTimeoutError()), ROLE_RESOLUTION_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // Path segments arrive already percent-decoded from Next. Anything that is
 // not a plain segment (empty, `.`, `..`, or containing a separator) is
@@ -53,7 +104,25 @@ async function requireAdminSession(request: NextRequest): Promise<NextResponse |
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
 
-  if (payload.role !== "admin") {
+  let liveRole: string;
+  try {
+    liveRole = await resolveUserRoleBounded(payload.id);
+  } catch (err) {
+    // Fail closed: never fall back to the (untrusted) token claim when the
+    // authoritative D1 read fails or stalls. The two cases share the client
+    // -visible body but are logged apart, so an operator can tell "D1 is
+    // slow" from "D1 is broken" (and both from a plain non-admin denial).
+    if (err instanceof RoleResolutionTimeoutError) {
+      console.error(
+        `${LOG_PREFIX} rejected: role resolution from D1 timed out after ${ROLE_RESOLUTION_TIMEOUT_MS}ms (D1 reachable but slow)`
+      );
+      return NextResponse.json({ error: "Failed to resolve admin role" }, { status: 500 });
+    }
+    console.error(`${LOG_PREFIX} rejected: failed to resolve role from D1`, err);
+    return NextResponse.json({ error: "Failed to resolve admin role" }, { status: 500 });
+  }
+
+  if (liveRole !== "admin") {
     console.warn(`${LOG_PREFIX} rejected: valid session with non-admin role`);
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

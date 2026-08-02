@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET, POST } from "../src/app/api/admin/[...path]/route";
 import { signSession } from "../src/lib/session";
+import * as usersDb from "../src/lib/db/users";
 
 // `/api/admin/[...path]` is a session-gated proxy in front of the Worker's
 // `/admin/*` routes: it verifies `fp_session`, requires `role === "admin"`,
@@ -9,6 +10,16 @@ import { signSession } from "../src/lib/session";
 // sees. Convention adopted here (documented in the route itself too): no or
 // invalid session -> 401 Unauthenticated; valid session but wrong role ->
 // 403 Forbidden.
+//
+// The `role` claim baked into the session token is a stale, up-to-30-day-old
+// hint, not the authority: this route always re-resolves the role from D1
+// via `resolveUserRole(payload.id)` and gates on that instead, so a revoked
+// admin loses access on the very next admin request, not merely at token
+// expiry.
+vi.mock("../src/lib/db/users", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/db/users")>();
+  return { ...actual, resolveUserRole: vi.fn() };
+});
 
 function setAdminToken(value: string | undefined) {
   if (value === undefined) {
@@ -39,9 +50,19 @@ function params(path: string[]) {
 }
 
 describe("GET/POST /api/admin/[...path] proxy", () => {
+  beforeEach(() => {
+    // Default: D1 agrees with an "admin" claim, so every pre-existing test
+    // below (written before role resolution moved to D1) keeps exercising
+    // the same scenarios it always did. The dedicated
+    // "re-resolves the role from D1" describe block below overrides this
+    // per-test to prove D1, not the claim, is the actual authority.
+    vi.mocked(usersDb.resolveUserRole).mockResolvedValue("admin");
+  });
+
   afterEach(() => {
     setAdminToken(undefined);
     vi.unstubAllGlobals();
+    vi.mocked(usersDb.resolveUserRole).mockReset();
   });
 
   it("rejects with 401 when there is no session cookie", async () => {
@@ -53,8 +74,9 @@ describe("GET/POST /api/admin/[...path] proxy", () => {
     expect(res.status).toBe(401);
   });
 
-  it("rejects with 403 when the session is valid but role is not admin", async () => {
+  it("rejects with 403 when the session is valid but D1 resolves a non-admin role", async () => {
     setAdminToken("service-secret-token");
+    vi.mocked(usersDb.resolveUserRole).mockResolvedValue("collector");
     const cookie = await signSession({ id: "usr_1", email: "u@example.com", role: "collector" });
     const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
 
@@ -199,6 +221,121 @@ describe("GET/POST /api/admin/[...path] proxy", () => {
   });
 });
 
+// D1 is the role authority, not the token claim. A session's `role` claim is
+// only ever a hint baked in at login/last-renewal and can be up to 30 days
+// stale; a revoked admin (their UserRole row deleted) must lose admin access
+// on their very next admin request, and a promoted user must gain it,
+// without waiting for the token to expire or be reissued.
+describe("/api/admin/[...path] proxy re-resolves the role from D1 (claim is not the authority)", () => {
+  afterEach(() => {
+    setAdminToken(undefined);
+    vi.unstubAllGlobals();
+    vi.mocked(usersDb.resolveUserRole).mockReset();
+  });
+
+  it("rejects with 403 and never calls the Worker when the token claims admin but D1 now resolves collector", async () => {
+    setAdminToken("service-secret-token");
+    vi.mocked(usersDb.resolveUserRole).mockResolvedValue("collector");
+    const cookie = await signSession({ id: "usr_1", email: "revoked-admin@example.com", role: "admin" });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(usersDb.resolveUserRole).toHaveBeenCalledWith("usr_1");
+  });
+
+  it("allows the request when the token claims collector but D1 now resolves admin", async () => {
+    setAdminToken("service-secret-token");
+    vi.mocked(usersDb.resolveUserRole).mockResolvedValue("admin");
+    const cookie = await signSession({ id: "usr_1", email: "promoted@example.com", role: "collector" });
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed with 500 and never calls the Worker when resolveUserRole throws (D1 unreachable/misconfigured)", async () => {
+    setAdminToken("service-secret-token");
+    vi.mocked(usersDb.resolveUserRole).mockRejectedValue(new Error("D1 binding 'DB' is unavailable"));
+    const cookie = await signSession({ id: "usr_1", email: "admin@example.com", role: "admin" });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+    const res = await GET(req, params(["stamps"]));
+
+    expect(res.status).toBe(500);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+// The authoritative D1 role lookup is a hard dependency of every admin
+// request, so it needs the same latency bound the Worker hop already has: a
+// merely SLOW (not erroring) D1 must never hold the edge invocation open
+// indefinitely. A timeout takes the same fail-closed path as a D1 error
+// (500, no Worker fetch) and must be distinguishable in the server-side log
+// from both a D1 error and a legitimate non-admin denial.
+// Fake timers are deliberately NOT used here: this suite runs the real
+// route, whose session verification goes through `crypto.subtle`, and those
+// promises settle off the real event loop — they never resolve while the
+// clock is faked. So the bound is asserted against the wall clock instead,
+// with a per-test timeout above the route's own bound so a regression shows
+// up as a failed assertion rather than as a bare runner timeout.
+describe("/api/admin/[...path] proxy bounds the D1 role lookup", () => {
+  afterEach(() => {
+    setAdminToken(undefined);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.mocked(usersDb.resolveUserRole).mockReset();
+  });
+
+  it(
+    "fails closed with 500 and never calls the Worker when resolveUserRole never settles",
+    async () => {
+      setAdminToken("service-secret-token");
+      const cookie = await signSession({ id: "usr_1", email: "admin@example.com", role: "admin" });
+      const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);
+
+      // Never settles: D1 is reachable but hung/slow, not throwing.
+      vi.mocked(usersDb.resolveUserRole).mockReturnValue(new Promise<string>(() => {}));
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const startedAt = Date.now();
+      const res = await GET(req, params(["stamps"]));
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(res.status).toBe(500);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      // Must give up well before the 15s Worker-hop budget.
+      expect(elapsedMs).toBeLessThan(5_000);
+
+      const logged = [...warnSpy.mock.calls, ...errorSpy.mock.calls]
+        .map((call) => call.map(String).join(" "))
+        .join("\n");
+      // Distinguishable from "D1 is broken" and from "you are not an admin".
+      expect(logged).toContain("timed out");
+      expect(logged).not.toContain("non-admin role");
+    },
+    20_000
+  );
+});
+
 // Post-PR4 the Worker has no admin fallback path, so an `ADMIN_API_TOKEN`
 // value mismatch between the Pages env var and the Worker secret fails every
 // admin action with a 403 that is indistinguishable, from the client, from a
@@ -207,10 +344,15 @@ describe("GET/POST /api/admin/[...path] proxy", () => {
 // "we sent a token and still got 403" signature. Client-visible bodies must
 // not become any more informative.
 describe("/api/admin/[...path] proxy observability", () => {
+  beforeEach(() => {
+    vi.mocked(usersDb.resolveUserRole).mockResolvedValue("admin");
+  });
+
   afterEach(() => {
     setAdminToken(undefined);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.mocked(usersDb.resolveUserRole).mockReset();
   });
 
   function captureLogs() {
@@ -234,6 +376,7 @@ describe("/api/admin/[...path] proxy observability", () => {
 
   it("logs the non-admin-role gate without changing the 403 body", async () => {
     setAdminToken("service-secret-token");
+    vi.mocked(usersDb.resolveUserRole).mockResolvedValue("collector");
     const logs = captureLogs();
     const cookie = await signSession({ id: "usr_1", email: "u@example.com", role: "collector" });
     const req = requestWithCookie("http://localhost:3000/api/admin/stamps", cookie);

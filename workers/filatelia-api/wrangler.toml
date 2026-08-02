@@ -39,3 +39,13 @@ bucket_name = "stamps-thumbs"
 [[r2_buckets]]
 binding = "STAMPS_BACKS"
 bucket_name = "stamps-backs"
+
+# Rate limit binding for the public, unauthenticated POST /analytics/visit
+# endpoint (see the comment above `checkAnalyticsRateLimit` in src/index.ts
+# for the limit/key rationale). `namespace_id` only needs to be unique within
+# this account; there is no other `[[ratelimits]]` entry in this repo yet, so
+# "1" is free.
+[[ratelimits]]
+name = "ANALYTICS_LIMITER"
+namespace_id = "1"
+simple = { limit = 60, period = 60 }

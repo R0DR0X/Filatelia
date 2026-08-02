@@ -78,15 +78,24 @@ never read from a `role` column on `User` (no such column exists).
 ### Requirement: Session Issuance and Expiry
 `signSession` MUST include an `exp` claim. Decided: 30-day lifetime with SLIDING
 RENEWAL — every authenticated request that passes through `src/middleware.ts`
-reissues `fp_session` with a fresh `iat`/`exp` computed at that moment, so an
-active session never expires mid-use. `signSession` is the sole source of
-`iat`/`exp`; it discards any caller-supplied values and always computes its own.
+reissues `fp_session` with a fresh `iat`/`exp` computed at that moment, so a
+session in continuous use does not expire from mere inactivity inside that
+30-day window. Renewal is NOT unbounded: the system MUST also enforce a 90-day
+ABSOLUTE ceiling measured from original issuance (`ABSOLUTE_SESSION_TTL_SECONDS`),
+so an actively used session MUST still be refused once it passes that ceiling.
+`signSession` is the sole source of `iat`/`exp`; it discards any caller-supplied
+values and always computes its own.
 `APP_SECRET` MUST be a required environment value with no fallback in production;
 the app MUST fail fast at startup if it is unset in a production environment.
 
 #### Scenario: Session issued with expiry
 - WHEN any login/register/OAuth flow issues `fp_session`
 - THEN the JWT payload includes `exp` set to issuance time plus the configured lifetime
+
+#### Scenario: Continuously renewed session hits the absolute ceiling
+- GIVEN a session that has been renewed often enough that `exp` is always fresh
+- WHEN more than 90 days have passed since its ORIGINAL issuance (`origIat`)
+- THEN verification MUST fail and the user MUST log in again, despite the fresh `exp`
 
 #### Scenario: Missing APP_SECRET in production
 - GIVEN `NODE_ENV=production` and `APP_SECRET` unset
@@ -161,7 +170,10 @@ to `fp_session` (per rollback ordering in the proposal).
 
 - Session lifetime: DECIDED — 30 days, sliding renewal on every authenticated
   request through `src/middleware.ts` (protected pages: `/admin/:path*`,
-  `/perfil`). API routes that call `verifySession` directly
+  `/perfil`), bounded by a 90-day absolute cap decided later (E3): unbounded
+  renewal let a session, and the `role` claim baked into it, live forever, so
+  the cap is what makes revocation eventually total even if every other layer
+  fails. API routes that call `verifySession` directly
   (`/api/collection`, `/api/match`, `/api/bids`) do NOT currently renew the
   cookie on their own responses — renewal happens at the middleware layer
   only. Revisit if product wants renewal on every API call too.

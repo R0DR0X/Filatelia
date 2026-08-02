@@ -16,7 +16,8 @@ The Next app (Cloudflare Pages, edge runtime, Web Crypto only) becomes the singl
 | Payload contract | `{ id, email, name, role, picture?, iat, exp }` — canonical key `id` | Keep Worker's `sub` (would require rewriting `/api/collection`, `/api/match`, middleware — the routes that already work) | `sub` dies with the Worker JWT code; `verifySession` rejects payloads missing `id` or `exp` |
 | Secret | `APP_SECRET` required; module throws in production if unset (mirrors E0 fail-fast). No dual-secret window | Dual-secret verify during rotation (complexity for one real user) | Old/dev-fallback cookies become invalid → clean re-login |
 | Admin transport | Next proxy `/api/admin/[...path]`: verify `fp_session` + `role==="admin"`, forward to Worker with `X-Admin-Token` (secret, constant-time compare in Worker) | Rewrite admin CRUD in Next (Worker endpoints touch R2/import — too large); new Bearer token in localStorage (keeps XSS-readable credential) | Minimal diff; httpOnly cookie never leaves origin; Worker endpoints unchanged internally |
-| Session lifetime | 30 days, SLIDING renewal — `src/middleware.ts` reissues `fp_session` with a fresh `iat`/`exp` on every authenticated request to a protected page | 7 days absolute, no renewal (original safe default) | Product decision made during apply (overrides the original default): an active user should never be logged out mid-session |
+| Session lifetime | 30 days, SLIDING renewal — `src/middleware.ts` reissues `fp_session` with a fresh `iat`/`exp` on every authenticated request to a protected page | 7 days absolute, no renewal (original safe default) | Product decision made during apply (overrides the original default): an active user should not be logged out for mere inactivity inside the 30-day window. NOTE: this is bounded by the absolute cap below — it is not "never logged out" |
+| Absolute session cap | 90 days, enforced on the preserved `origIat` claim: `verifySession` rejects a token older than `ABSOLUTE_SESSION_TTL_SECONDS` regardless of how fresh `exp` is | Unbounded sliding renewal (the E1 behavior); shorter caps (interrupt a genuinely active user) | Decision made LATER than the row above, during E3, and it deliberately narrows it: unbounded renewal meant a session — and the `role` claim baked into it — could live forever, so a stolen cookie or a revoked admin kept working as long as it was used once every 30 days. The cap is what makes revocation eventually total even if every other layer fails. Net contract: 30-day sliding window inside a 90-day ceiling |
 
 ## Sequence Diagrams
 
@@ -99,6 +100,6 @@ Ordering guarantee: nothing is deleted while a client depends on it — `lib/aut
 
 ## Open Questions
 
-- [x] Session lifetime 7 vs 30 days; sliding renewal wanted? DECIDED during apply: 30 days, sliding renewal at `src/middleware.ts`.
+- [x] Session lifetime 7 vs 30 days; sliding renewal wanted? DECIDED during apply: 30 days, sliding renewal at `src/middleware.ts`. Later NARROWED in E3: renewal is capped by a 90-day absolute ceiling (`origIat`), so even a continuously active session must re-authenticate eventually.
 - [x] Registration open vs gated at launch? DECIDED during apply: open, no gating.
 - [x] Any external consumer of Worker `/auth/*` besides `lib/auth.ts`? Confirmed during apply via repo-wide grep for `/auth/login|register|logout|me`: only `filatelia-web/src/lib/auth.ts` calls those Worker routes. No other consumer found.

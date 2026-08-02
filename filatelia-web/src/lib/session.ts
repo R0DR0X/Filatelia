@@ -5,12 +5,42 @@
 // `signSession` always computes its own `iat`/`exp`; callers cannot forge an
 // arbitrary expiry through the payload.
 //
+// Absolute cap: sliding renewal alone lets a session live forever as long as
+// it is used at least once every 30 days. To bound that, every token also
+// carries `origIat` — the timestamp of the ORIGINAL issuance, preserved
+// across renewals — and `verifySession` refuses a token once
+// `now - origIat > ABSOLUTE_SESSION_TTL_SECONDS` (90 days), regardless of how
+// fresh `exp` is. The user must log in again past that point. 90 days is
+// generous enough not to interrupt a genuinely active user (who re-logs in
+// far less often than that in practice) while bounding how long a token
+// compromised once, or a revoked role baked into a claim, can keep renewing.
+//
+// `origIat` is only ever trusted from a payload that already passed
+// `verifySession`'s HMAC check on a prior request (i.e. the renewal path in
+// src/middleware.ts) — never from arbitrary caller input. As defense in
+// depth, `signSession` itself also refuses to honor an incoming `origIat`
+// that lies in the future: it is only preserved when it is <= the fresh
+// `iat` being issued, otherwise it is reset to `iat`. This makes it
+// impossible for a caller to "extend" a session's absolute cap by simply
+// passing a manufactured, future-dated `origIat` into the payload.
+//
+// Legacy tokens issued before this change carry no `origIat` claim.
+// `verifySession` treats a missing `origIat` as "no absolute cap applies
+// yet" rather than rejecting the token outright — mass-invalidating every
+// session in flight the moment this ships would be a self-inflicted outage,
+// not a security requirement. The first time such a token is renewed,
+// `signSession` stamps it with a fresh `origIat` (see above), so it becomes
+// capped going forward from that point. Worst case, a pre-existing session
+// keeps sliding for up to one more `SESSION_TTL_SECONDS` (30 days) window
+// before the cap starts applying to it.
+//
 // Secret: `APP_SECRET` is required. In production, signing or verifying
 // without it throws immediately (fail-fast) instead of falling back to a
 // well-known default secret. Outside production, a fixed dev fallback keeps
 // local development working without extra setup.
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+export const ABSOLUTE_SESSION_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days
 
 const DEV_FALLBACK_SECRET = 'dev-secret-only-change-in-prod';
 
@@ -71,11 +101,18 @@ export async function signSession(
   payload: Record<string, any>,
   options: { ttlSeconds?: number } = {}
 ): Promise<string> {
-  const { iat: _iat, exp: _exp, ...rest } = payload;
+  const { iat: _iat, exp: _exp, origIat: incomingOrigIat, ...rest } = payload;
   const ttlSeconds = options.ttlSeconds ?? SESSION_TTL_SECONDS;
   const iat = nowSeconds();
   const exp = iat + ttlSeconds;
-  const fullPayload = { ...rest, iat, exp };
+  // Preserve the original issuance time across renewals (see module header
+  // for the absolute-cap rationale). Only honor an incoming `origIat` when
+  // it cannot possibly extend the cap, i.e. it is not in the future relative
+  // to the fresh `iat` being issued right now; otherwise treat this as a
+  // first issuance and stamp `origIat` from the current clock.
+  const origIat =
+    typeof incomingOrigIat === 'number' && incomingOrigIat <= iat ? incomingOrigIat : iat;
+  const fullPayload = { ...rest, origIat, iat, exp };
 
   const header = { alg: 'HS256', typ: 'JWT' };
   const enc = new TextEncoder();
@@ -128,6 +165,14 @@ export async function verifySession(token: string): Promise<any | null> {
 
     if (typeof payload.exp !== 'number' || payload.exp < nowSeconds()) return null;
     if (typeof payload.id !== 'string' || !payload.id) return null;
+
+    // Absolute cap: reject regardless of how fresh `exp` is once the
+    // ORIGINAL issuance is more than ABSOLUTE_SESSION_TTL_SECONDS in the
+    // past. A missing `origIat` (legacy token issued before this claim
+    // existed) is grandfathered in — see module header.
+    if (typeof payload.origIat === 'number' && nowSeconds() - payload.origIat > ABSOLUTE_SESSION_TTL_SECONDS) {
+      return null;
+    }
 
     return payload;
   } catch (error) {

@@ -13,6 +13,11 @@ type Bindings = {
   SUPABASE_SERVICE_ROLE_KEY: string;
   OPENROUTER_API_KEY: string;
   ADMIN_API_TOKEN: string;
+  // Optional: absent on any deployment/environment that predates this binding
+  // (older Worker version, a local `wrangler dev` run against a stale
+  // config, etc). Every call site MUST treat a missing binding as "allow",
+  // never throw on it — see `checkAnalyticsRateLimit`.
+  ANALYTICS_LIMITER?: RateLimit;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -1291,16 +1296,71 @@ export function truncateAnalyticsField(value: unknown): string | null | undefine
 // PUBLIC BY DESIGN: this endpoint's only consumer is
 // `filatelia-web/src/components/AnalyticsTracker.tsx`, which fires for
 // every anonymous visitor, so it intentionally carries no `requireAdmin`
-// check. It therefore remains an unauthenticated, unrate-limited write path
-// into production D1 — a known, accepted risk. Rate limiting would need KV
-// or a Durable Object and is a separate design decision, deliberately out
-// of scope here; the mitigations applied are (a) removing the per-request
-// DDL below (the `SiteVisit` table now ships via
-// `filatelia-web/db/migrations/0008_create_site_visit.sql`) and (b)
-// bounding `path`/`referrer` length so a caller cannot write unbounded
-// strings into the row.
+// check. It is now rate-limited (see `checkAnalyticsRateLimit` below) and
+// its inputs are bounded (`truncateAnalyticsField`); the mitigations applied
+// are (a) removing the per-request DDL that used to run here (the
+// `SiteVisit` table now ships via
+// `filatelia-web/db/migrations/0008_create_site_visit.sql`), (b) bounding
+// `path`/`referrer` length so a caller cannot write unbounded strings into
+// the row, and (c) the rate limit below so a caller cannot flood D1 with
+// INSERTs.
+//
+// Key: the caller's `CF-Connecting-IP`. Cloudflare's own rate-limiting docs
+// explicitly warn that client IP is NOT the recommended key, because many
+// real users share one IP (NAT, corporate proxies, and especially mobile
+// carrier NAT). It is used here anyway because this endpoint is
+// intentionally anonymous — there is no session, cookie, or other identity
+// to key on — so IP is the only signal available at all. A caller with no
+// `CF-Connecting-IP` header (a request that did not come through Cloudflare)
+// falls back to the constant key below, meaning every header-less caller
+// shares a single bucket; that is an accepted, deliberate trade-off, not an
+// oversight.
+//
+// Limit: 60 requests per 60 seconds, PER CLOUDFLARE LOCATION (this is a
+// Workers rate limit, not a global one — the same IP hitting two different
+// PoPs gets two independent buckets). A real visitor triggers this endpoint
+// once per page view / SPA route change from `AnalyticsTracker.tsx`; even
+// rapid, deliberate browsing (multiple page loads per second) stays far
+// under 60/minute. A flood — scripted or a shared-IP burst — that sustains
+// more than one request per second from the same PoP is not something a
+// single real visitor produces, so it is the intended target.
+export function getAnalyticsRateLimitKey(req: Request): string {
+  return req.headers.get('CF-Connecting-IP') || 'no-cf-connecting-ip';
+}
+
+// Isolated from the Hono handler so it can be unit-tested directly: this
+// suite's D1 pool has no migrations, so any request that reaches the
+// `SiteVisit` INSERT 500s regardless of what the rate limiter decided,
+// which would make an HTTP-level assertion of "under the limit -> allowed"
+// pass for the wrong reason. Testing this function directly proves the
+// actual decision.
+//
+// DEGRADE GRACEFULLY: `limiter` is `undefined` on any deployment where the
+// `ANALYTICS_LIMITER` binding isn't present (older deployment, local dev,
+// or a test pool that doesn't wire it up). That case must never throw and
+// must never silently allow-with-no-signal — it is logged with
+// `console.warn`, matching the logging convention already used by
+// `requireAdmin` and the catch block below, so an operator can see the
+// limiter was unavailable rather than assuming it ran.
+export async function checkAnalyticsRateLimit(
+  limiter: RateLimit | undefined,
+  key: string
+): Promise<boolean> {
+  if (!limiter) {
+    console.warn('analytics/visit: ANALYTICS_LIMITER binding is absent — allowing the request unrate-limited');
+    return true;
+  }
+  const { success } = await limiter.limit({ key });
+  return success;
+}
+
 app.post('/analytics/visit', async (c) => {
   try {
+    const allowed = await checkAnalyticsRateLimit(c.env.ANALYTICS_LIMITER, getAnalyticsRateLimitKey(c.req.raw));
+    if (!allowed) {
+      return c.json({ success: false, error: 'Too many requests' }, 429);
+    }
+
     const { path, referrer } = await c.req.json();
 
     const id = crypto.randomUUID();

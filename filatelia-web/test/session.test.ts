@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { signSession, verifySession, SESSION_TTL_SECONDS } from "../src/lib/session";
+import { signSession, verifySession, SESSION_TTL_SECONDS, ABSOLUTE_SESSION_TTL_SECONDS } from "../src/lib/session";
 
 // Dev-only fallback secret used by session.ts outside production. Not a real
 // secret — mirrors the literal already visible at the top of the source file
@@ -63,6 +63,91 @@ describe("session exp issuance (30-day sliding lifetime)", () => {
     const payload = await verifySession(token);
     expect(payload).not.toBeNull();
     expect(payload.exp).toBeGreaterThan(1);
+  });
+});
+
+describe("session absolute lifetime cap (origIat survives sliding renewal)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("exposes a 90-day absolute cap, distinct from the 30-day sliding TTL", () => {
+    expect(ABSOLUTE_SESSION_TTL_SECONDS).toBe(60 * 60 * 24 * 90);
+  });
+
+  it("keeps renewing a token repeatedly renewed well inside the absolute cap", async () => {
+    vi.useFakeTimers();
+    const start = Date.parse("2024-01-01T00:00:00Z");
+    vi.setSystemTime(start);
+
+    let token = await signSession({ id: "usr_1" });
+
+    // Simulate middleware's sliding renewal every 20 days (well under the
+    // 30-day exp) for 80 days total — still under the 90-day absolute cap.
+    for (let i = 1; i <= 4; i++) {
+      vi.setSystemTime(start + i * 20 * 24 * 60 * 60 * 1000);
+      const payload = await verifySession(token);
+      expect(payload).not.toBeNull();
+      token = await signSession(payload);
+    }
+
+    const finalPayload = await verifySession(token);
+    expect(finalPayload).not.toBeNull();
+  });
+
+  it("rejects a repeatedly-renewed token once the total elapsed time exceeds the absolute cap, even though each renewal kept exp fresh", async () => {
+    vi.useFakeTimers();
+    const start = Date.parse("2024-01-01T00:00:00Z");
+    vi.setSystemTime(start);
+
+    let token = await signSession({ id: "usr_1" });
+
+    for (let i = 1; i <= 4; i++) {
+      vi.setSystemTime(start + i * 20 * 24 * 60 * 60 * 1000);
+      const payload = await verifySession(token);
+      expect(payload).not.toBeNull();
+      token = await signSession(payload);
+    }
+
+    // Day 100: exp from the last renewal (day 80 + 30) is still in the
+    // future, but total elapsed time since the ORIGINAL issuance (day 0) is
+    // 100 days > the 90-day absolute cap.
+    vi.setSystemTime(start + 100 * 24 * 60 * 60 * 1000);
+    const payload = await verifySession(token);
+    expect(payload).toBeNull();
+  });
+
+  it("cannot be extended by a caller passing a future origIat directly into signSession", async () => {
+    vi.useFakeTimers();
+    const now = Date.parse("2024-01-01T00:00:00Z");
+    vi.setSystemTime(now);
+
+    const nowSeconds = Math.floor(now / 1000);
+    const forgedFutureOrigIat = nowSeconds + 60 * 60 * 24 * 365; // 1 year in the future
+
+    const token = await signSession({ id: "usr_1", origIat: forgedFutureOrigIat });
+    const payload = await verifySession(token);
+
+    expect(payload).not.toBeNull();
+    // The forged future value must never be honored: origIat must be
+    // stamped from the server clock (now), not accepted verbatim.
+    expect(payload.origIat).toBeLessThanOrEqual(nowSeconds);
+  });
+
+  it("grandfathers a legacy token signed before this change (no origIat claim) — no cap is enforced until it is next renewed", async () => {
+    const iat = Math.floor(Date.now() / 1000);
+    const legacyToken = await signWithDevSecret({ id: "usr_1", iat, exp: iat + SESSION_TTL_SECONDS });
+
+    const payload = await verifySession(legacyToken);
+    expect(payload).not.toBeNull();
+    expect(payload.origIat).toBeUndefined();
+
+    // Once renewed, the token is no longer legacy: it gets an origIat and is
+    // capped going forward from that point.
+    const renewed = await signSession(payload);
+    const renewedPayload = await verifySession(renewed);
+    expect(renewedPayload).not.toBeNull();
+    expect(typeof renewedPayload.origIat).toBe("number");
   });
 });
 

@@ -4,6 +4,8 @@ import { calculateReciprocalMatches } from "@/lib/match-engine";
 
 import { verifySession } from "@/lib/session";
 
+export const runtime = 'edge';
+
 async function getUserIdFromSession(request: NextRequest): Promise<string | null> {
   const sessionCookie = request.cookies.get("fp_session")?.value;
   if (!sessionCookie) {

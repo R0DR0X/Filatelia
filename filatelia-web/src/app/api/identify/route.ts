@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 const WORKER_API_URL = process.env.WORKER_API_URL || process.env.NEXT_PUBLIC_WORKER_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev';
 
 export async function POST(request: Request) {

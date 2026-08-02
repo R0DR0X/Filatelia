@@ -1,133 +1,115 @@
 import { UserCollectionItem, ListType, ConditionGrade, CollectionRequestPayload } from "@/types/collection";
 
-let collectionStore: UserCollectionItem[] = [
-  {
-    id: 1,
-    userId: "usr_collector_1",
-    stampId: "PE-1857-01",
-    listType: "collection",
-    condition: "MNH",
-    notes: "Perfecto estado, centrado de catálogo",
-    createdAt: "2026-07-01T10:00:00Z",
-    updatedAt: "2026-07-01T10:00:00Z",
-    stampTitle: "Perú 1857 1d Azul UN DINERO",
-    stampCatalogNumber: "Scott #1"
-  },
-  {
-    id: 2,
-    userId: "usr_collector_1",
-    stampId: "PE-1858-02",
-    listType: "trade",
-    condition: "MH",
-    notes: "Para intercambio por sello de 1860",
-    createdAt: "2026-07-05T12:00:00Z",
-    updatedAt: "2026-07-05T12:00:00Z",
-    stampTitle: "Perú 1858 1d Rojo Frambuesa",
-    stampCatalogNumber: "Scott #3"
-  },
-  {
-    id: 3,
-    userId: "usr_collector_1",
-    stampId: "PE-1860-03",
-    listType: "wishlist",
-    condition: "MNH",
-    notes: "Buscando sello en excelente estado",
-    createdAt: "2026-07-10T15:00:00Z",
-    updatedAt: "2026-07-10T15:00:00Z",
-    stampTitle: "Perú 1860 1d Azul Escudo",
-    stampCatalogNumber: "Scott #7"
-  },
-  {
-    id: 4,
-    userId: "usr_collector_2",
-    stampId: "PE-1860-03",
-    listType: "trade",
-    condition: "Used",
-    notes: "Disponible para canje",
-    createdAt: "2026-07-12T09:00:00Z",
-    updatedAt: "2026-07-12T09:00:00Z",
-    stampTitle: "Perú 1860 1d Azul Escudo",
-    stampCatalogNumber: "Scott #7"
-  },
-  {
-    id: 5,
-    userId: "usr_collector_2",
-    stampId: "PE-1858-02",
-    listType: "wishlist",
-    condition: "MH",
-    notes: "Deseo completar serie 1858",
-    createdAt: "2026-07-14T11:00:00Z",
-    updatedAt: "2026-07-14T11:00:00Z",
-    stampTitle: "Perú 1858 1d Rojo Frambuesa",
-    stampCatalogNumber: "Scott #3"
+// D1-backed access for the UserCollection table (migration 0006_user_collections.sql).
+// Mirrors the query-gateway pattern already established in src/lib/prisma.ts:
+// prefer the direct D1 binding (process.env.DB) when running inside the
+// Cloudflare Pages/Workers edge runtime, and fall back to the remote SQL
+// gateway Worker (same physical D1 database, database_id
+// a06f77b8-6826-4594-8bee-48018e637e01) for local/dev/test environments that
+// don't have the binding injected into process.env.
+const runQuery = async (sql: string, params: any[] = []): Promise<any[]> => {
+  const d1 = (process.env as any).DB;
+  if (d1 && typeof d1.prepare === "function") {
+    const res = await d1.prepare(sql).bind(...params).all();
+    return res.results || [];
   }
-];
 
-let nextId = 10;
+  const res = await fetch("https://filatelia-api.rodrigopianto2005.workers.dev/query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, params }),
+  });
+  if (!res.ok) {
+    throw new Error(`D1 query gateway request failed with status ${res.status}`);
+  }
+  const data: any = await res.json();
+  return data.results || [];
+};
 
-export function resetCollectionStore() {
-  collectionStore = [];
-  nextId = 1;
+function mapRow(row: any): UserCollectionItem {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    stampId: row.stamp_id,
+    listType: row.list_type,
+    condition: row.condition,
+    notes: row.notes ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+const VALID_LIST_TYPES: ListType[] = ["collection", "wishlist", "trade"];
+const VALID_CONDITIONS: ConditionGrade[] = ["MNH", "MH", "Used", "FDC"];
+
+/**
+ * Test-only utility: clears the UserCollection table so integration tests
+ * (which run against a real D1 instance, local or remote) start from a clean
+ * slate. Not used by production code paths.
+ */
+export async function resetCollectionStore(): Promise<void> {
+  await runQuery("DELETE FROM UserCollection", []);
 }
 
 export async function getUserCollection(userId: string, listType?: ListType): Promise<UserCollectionItem[]> {
-  let items = collectionStore.filter(item => item.userId === userId);
+  const params: any[] = [userId];
+  let sql = "SELECT * FROM UserCollection WHERE user_id = ?";
   if (listType) {
-    items = items.filter(item => item.listType === listType);
+    sql += " AND list_type = ?";
+    params.push(listType);
   }
-  return items;
+  sql += " ORDER BY updated_at DESC";
+
+  const rows = await runQuery(sql, params);
+  return rows.map(mapRow);
 }
 
 export async function getAllUserCollections(): Promise<UserCollectionItem[]> {
-  // TODO: replace with paginated D1 query when D1 is wired
-  return collectionStore.slice(0, 5000);
+  // Cap preserved from the previous implementation to bound payload size
+  // until real pagination is introduced.
+  const rows = await runQuery("SELECT * FROM UserCollection LIMIT 5000", []);
+  return rows.map(mapRow);
 }
 
 export async function addCollectionItem(userId: string, payload: CollectionRequestPayload): Promise<UserCollectionItem> {
-  const validListTypes: ListType[] = ['collection', 'wishlist', 'trade'];
-  const validConditions: ConditionGrade[] = ['MNH', 'MH', 'Used', 'FDC'];
-
   if (!payload.stampId || !payload.listType) {
     throw new Error("Missing required fields: stampId and listType");
   }
 
-  if (!validListTypes.includes(payload.listType)) {
+  if (!VALID_LIST_TYPES.includes(payload.listType)) {
     throw new Error(`Invalid list_type '${payload.listType}'. Must be collection, wishlist, or trade.`);
   }
 
-  const condition: ConditionGrade = payload.condition || 'MNH';
-  if (!validConditions.includes(condition)) {
+  const condition: ConditionGrade = payload.condition || "MNH";
+  if (!VALID_CONDITIONS.includes(condition)) {
     throw new Error(`Invalid condition '${condition}'. Must be MNH, MH, Used, or FDC.`);
   }
 
-  // Check unique constraint (user_id, stamp_id, list_type)
-  const existing = collectionStore.find(
-    item => item.userId === userId && item.stampId === payload.stampId && item.listType === payload.listType
+  const notes = payload.notes ?? "";
+
+  const existingRows = await runQuery(
+    "SELECT * FROM UserCollection WHERE user_id = ? AND stamp_id = ? AND list_type = ?",
+    [userId, payload.stampId, payload.listType]
   );
 
-  const now = new Date().toISOString();
-
-  if (existing) {
-    existing.condition = condition;
-    if (payload.notes !== undefined) existing.notes = payload.notes;
-    existing.updatedAt = now;
-    return existing;
+  if (existingRows.length > 0) {
+    const rows = await runQuery(
+      `UPDATE UserCollection
+       SET condition = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND stamp_id = ? AND list_type = ?
+       RETURNING *`,
+      [condition, notes, userId, payload.stampId, payload.listType]
+    );
+    return mapRow(rows[0]);
   }
 
-  const newItem: UserCollectionItem = {
-    id: nextId++,
-    userId,
-    stampId: payload.stampId,
-    listType: payload.listType,
-    condition,
-    notes: payload.notes || "",
-    createdAt: now,
-    updatedAt: now,
-    stampTitle: `Sello ${payload.stampId}`,
-  };
-
-  collectionStore.push(newItem);
-  return newItem;
+  const rows = await runQuery(
+    `INSERT INTO UserCollection (user_id, stamp_id, list_type, condition, notes)
+     VALUES (?, ?, ?, ?, ?)
+     RETURNING *`,
+    [userId, payload.stampId, payload.listType, condition, notes]
+  );
+  return mapRow(rows[0]);
 }
 
 export async function updateCollectionItem(
@@ -135,29 +117,43 @@ export async function updateCollectionItem(
   id: number,
   updates: { condition?: ConditionGrade; notes?: string }
 ): Promise<UserCollectionItem> {
-  const item = collectionStore.find(i => i.id === id && i.userId === userId);
-  if (!item) {
-    throw new Error("Collection item not found");
+  if (updates.condition && !VALID_CONDITIONS.includes(updates.condition)) {
+    throw new Error(`Invalid condition '${updates.condition}'`);
   }
 
+  const setClauses: string[] = [];
+  const params: any[] = [];
+
   if (updates.condition) {
-    const validConditions: ConditionGrade[] = ['MNH', 'MH', 'Used', 'FDC'];
-    if (!validConditions.includes(updates.condition)) {
-      throw new Error(`Invalid condition '${updates.condition}'`);
-    }
-    item.condition = updates.condition;
+    setClauses.push("condition = ?");
+    params.push(updates.condition);
   }
 
   if (updates.notes !== undefined) {
-    item.notes = updates.notes;
+    setClauses.push("notes = ?");
+    params.push(updates.notes);
   }
 
-  item.updatedAt = new Date().toISOString();
-  return item;
+  setClauses.push("updated_at = CURRENT_TIMESTAMP");
+
+  params.push(id, userId);
+
+  const rows = await runQuery(
+    `UPDATE UserCollection SET ${setClauses.join(", ")} WHERE id = ? AND user_id = ? RETURNING *`,
+    params
+  );
+
+  if (rows.length === 0) {
+    throw new Error("Collection item not found");
+  }
+
+  return mapRow(rows[0]);
 }
 
 export async function deleteCollectionItem(userId: string, id: number): Promise<boolean> {
-  const initialLength = collectionStore.length;
-  collectionStore = collectionStore.filter(i => !(i.id === id && i.userId === userId));
-  return collectionStore.length < initialLength;
+  const rows = await runQuery(
+    "DELETE FROM UserCollection WHERE id = ? AND user_id = ? RETURNING id",
+    [id, userId]
+  );
+  return rows.length > 0;
 }

@@ -1,40 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { signSession, verifySession } from "@/lib/session";
+import { verifySession } from "@/lib/session";
 
-export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV !== "development") {
-    return NextResponse.json({ error: "Not implemented in production" }, { status: 501 });
-  }
+export const runtime = 'edge';
 
-  try {
-    const body = await request.json();
-    const { email, password } = body;
-
-    if (!email) {
-      return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
-    }
-
-    // Default user for testing/auth flow
-    const user = {
-      id: `usr_${Buffer.from(email).toString('hex').slice(0, 10)}`,
-      name: email.split('@')[0],
-      email,
-      role: "collector",
-    };
-
-    const response = NextResponse.json({ success: true, user });
-    const signedToken = await signSession(user);
-    response.cookies.set("fp_session", signedToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
-    return response;
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-  }
+export async function POST(_request: NextRequest) {
+  // Credential-based login is not implemented in this app boundary: the only
+  // real authentication method wired into filatelia-web is Google OAuth
+  // (see /api/auth/google). A previous version of this route accepted ANY
+  // password without verification, gated only by NODE_ENV !== "development"
+  // — an insecure bypass reachable via env misconfiguration. Rather than
+  // reintroduce a credential check against an unverified schema, this route
+  // now always returns 501 so no environment can silently authenticate a
+  // user without a password check.
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Credential login is not supported. Use Google OAuth via /api/auth/google.",
+    },
+    { status: 501 }
+  );
 }
 
 export async function GET(request: NextRequest) {

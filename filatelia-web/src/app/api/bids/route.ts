@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { placeBid } from "@/lib/db/auctions";
 
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Authentication check

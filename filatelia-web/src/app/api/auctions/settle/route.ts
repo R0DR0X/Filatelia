@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { settleExpiredAuctions } from "@/lib/db/auctions";
 
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const settlementKeyHeader = request.headers.get("x-settlement-key") || undefined;

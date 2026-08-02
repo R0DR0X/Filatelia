@@ -1,29 +1,23 @@
 import { UserCollectionItem, ListType, ConditionGrade, CollectionRequestPayload } from "@/types/collection";
 
 // D1-backed access for the UserCollection table (migration 0006_user_collections.sql).
-// Mirrors the query-gateway pattern already established in src/lib/prisma.ts:
-// prefer the direct D1 binding (process.env.DB) when running inside the
-// Cloudflare Pages/Workers edge runtime, and fall back to the remote SQL
-// gateway Worker (same physical D1 database, database_id
-// a06f77b8-6826-4594-8bee-48018e637e01) for local/dev/test environments that
-// don't have the binding injected into process.env.
+// Requires the direct D1 binding (process.env.DB), injected by the Cloudflare
+// Pages/Workers edge runtime (see wrangler.toml). There is no network
+// fallback: the Worker's /query endpoint no longer accepts arbitrary `sql`
+// (that gateway was a critical vulnerability and has been removed entirely),
+// so an environment without the DB binding simply cannot run these queries.
+// Run `wrangler pages dev` locally to get the binding instead of `next dev`.
 const runQuery = async (sql: string, params: any[] = []): Promise<any[]> => {
   const d1 = (process.env as any).DB;
-  if (d1 && typeof d1.prepare === "function") {
-    const res = await d1.prepare(sql).bind(...params).all();
-    return res.results || [];
+  if (!d1 || typeof d1.prepare !== "function") {
+    throw new Error(
+      "D1 binding 'DB' is unavailable in this environment. The remote SQL gateway " +
+      "has been removed for security reasons; run this code where the D1 binding " +
+      "is attached (e.g. `wrangler pages dev`)."
+    );
   }
-
-  const res = await fetch("https://filatelia-api.rodrigopianto2005.workers.dev/query", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sql, params }),
-  });
-  if (!res.ok) {
-    throw new Error(`D1 query gateway request failed with status ${res.status}`);
-  }
-  const data: any = await res.json();
-  return data.results || [];
+  const res = await d1.prepare(sql).bind(...params).all();
+  return res.results || [];
 };
 
 function mapRow(row: any): UserCollectionItem {

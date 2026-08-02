@@ -1,34 +1,23 @@
 // A drop-in Prisma replacement that translates ORM calls to SQLite/D1 SQL queries
 // both locally (via Cloudflare API gateway) and in production.
 
+// Requires the direct D1 binding (process.env.DB), injected by the Cloudflare
+// Pages/Workers edge runtime. There is no network fallback: the Worker's
+// /query endpoint no longer accepts arbitrary `sql` (that gateway was a
+// critical vulnerability and has been removed entirely), so an environment
+// without the DB binding simply cannot run these queries. Run
+// `wrangler pages dev` locally to get the binding instead of `next dev`.
 const runQuery = async (sql: string, params: any[] = []): Promise<any[]> => {
-  // If we are running in Cloudflare Pages edge runtime and process.env.DB is bound
   const d1 = (process.env as any).DB;
-  if (d1 && typeof d1.prepare === 'function') {
-    try {
-      const res = await d1.prepare(sql).bind(...params).all();
-      return res.results || [];
-    } catch (e) {
-      console.error("D1 local query failed:", e);
-      return [];
-    }
+  if (!d1 || typeof d1.prepare !== 'function') {
+    throw new Error(
+      "D1 binding 'DB' is unavailable in this environment. The remote SQL gateway " +
+      "has been removed for security reasons; run this code where the D1 binding " +
+      "is attached (e.g. `wrangler pages dev`)."
+    );
   }
-  
-  // Local development / build-time fallback to the API Worker Gateway
-  try {
-    const res = await fetch("https://filatelia-api.rodrigopianto2005.workers.dev/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sql, params }),
-    });
-    if (res.ok) {
-      const data: any = await res.json();
-      return data.results || [];
-    }
-  } catch (e) {
-    console.error("Failed to query remote D1 database:", e);
-  }
-  return [];
+  const res = await d1.prepare(sql).bind(...params).all();
+  return res.results || [];
 };
 
 export const prisma: any = {

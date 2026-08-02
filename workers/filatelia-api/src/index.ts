@@ -27,16 +27,15 @@ app.use('*', cors({
   maxAge: 600,
 }));
 
-// Helper to authenticate user via Supabase Auth with local fallback
+// Helper to authenticate user via Supabase Auth.
+// No fallback identity exists: an unauthenticated request, an invalid/expired
+// token, or a Supabase outage must all resolve to `null` (401 downstream),
+// never to a usable identity.
 const getAuthenticatedUser = async (c: any): Promise<{ id: string; email?: string } | null> => {
   const authHeader = c.req.header('Authorization');
   if (!authHeader) return null;
   const token = authHeader.replace("Bearer ", "");
-
-  // Fallback for demo token or testing
-  if (token === "demo-token" || token.length < 20) {
-    return { id: "demo-user-id", email: "demo@filateliaperuana.com" };
-  }
+  if (!token) return null;
 
   try {
     const res = await fetch(`${c.env.SUPABASE_URL || 'https://tshatwvvkworsogjfjyj.supabase.co'}/auth/v1/user`, {
@@ -53,8 +52,7 @@ const getAuthenticatedUser = async (c: any): Promise<{ id: string; email?: strin
     console.error("Supabase auth verification failed:", e);
   }
 
-  // Graceful fallback for local development/testing if Supabase is offline
-  return { id: "demo-user-id", email: "demo@filateliaperuana.com" };
+  return null;
 };
 
 // ==========================================
@@ -537,15 +535,16 @@ app.get('/stamps', async (c) => {
 app.post('/query', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { query, image, topK = 10, sql, params = [] } = body;
+    const { query, image, topK = 10, sql } = body;
 
-    // Database Gateway SQL execution compatibility
-    if (sql && !query && !image) {
-      if (!c.env.DB) {
-        return c.json({ success: false, error: "Database binding DB unavailable" }, 500);
-      }
-      const { results } = await c.env.DB.prepare(sql).bind(...params).all();
-      return c.json({ success: true, results });
+    // The arbitrary-SQL gateway that used to live here has been removed: it
+    // let any unauthenticated caller execute arbitrary SQL against the
+    // production database. There is no replacement gateway, gated or
+    // otherwise — callers that genuinely need a query use a typed,
+    // purpose-specific endpoint instead (e.g. /collection). A `sql` field is
+    // never executed; its mere presence is rejected outright.
+    if (sql !== undefined) {
+      return c.json({ success: false, error: "Unauthorized" }, 401);
     }
 
     // Strict parameter validation according to REQ-VEC-003 / Task 2.5

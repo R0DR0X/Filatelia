@@ -16,7 +16,7 @@ The Next app (Cloudflare Pages, edge runtime, Web Crypto only) becomes the singl
 | Payload contract | `{ id, email, name, role, picture?, iat, exp }` — canonical key `id` | Keep Worker's `sub` (would require rewriting `/api/collection`, `/api/match`, middleware — the routes that already work) | `sub` dies with the Worker JWT code; `verifySession` rejects payloads missing `id` or `exp` |
 | Secret | `APP_SECRET` required; module throws in production if unset (mirrors E0 fail-fast). No dual-secret window | Dual-secret verify during rotation (complexity for one real user) | Old/dev-fallback cookies become invalid → clean re-login |
 | Admin transport | Next proxy `/api/admin/[...path]`: verify `fp_session` + `role==="admin"`, forward to Worker with `X-Admin-Token` (secret, constant-time compare in Worker) | Rewrite admin CRUD in Next (Worker endpoints touch R2/import — too large); new Bearer token in localStorage (keeps XSS-readable credential) | Minimal diff; httpOnly cookie never leaves origin; Worker endpoints unchanged internally |
-| Session lifetime | 7 days, absolute (matches current Google `maxAge`); no sliding renewal | 30d / sliding (product question, deferred) | Safe default; flagged open |
+| Session lifetime | 30 days, SLIDING renewal — `src/middleware.ts` reissues `fp_session` with a fresh `iat`/`exp` on every authenticated request to a protected page | 7 days absolute, no renewal (original safe default) | Product decision made during apply (overrides the original default): an active user should never be logged out mid-session |
 
 ## Sequence Diagrams
 
@@ -99,6 +99,6 @@ Ordering guarantee: nothing is deleted while a client depends on it — `lib/aut
 
 ## Open Questions
 
-- [ ] Session lifetime 7 vs 30 days; sliding renewal wanted? (defaulted: 7d absolute)
-- [ ] Registration open vs gated at launch (product; does not change architecture)
-- [ ] Any external consumer of Worker `/auth/*` besides `lib/auth.ts`? Confirm before stage 3.
+- [x] Session lifetime 7 vs 30 days; sliding renewal wanted? DECIDED during apply: 30 days, sliding renewal at `src/middleware.ts`.
+- [x] Registration open vs gated at launch? DECIDED during apply: open, no gating.
+- [x] Any external consumer of Worker `/auth/*` besides `lib/auth.ts`? Confirmed during apply via repo-wide grep for `/auth/login|register|logout|me`: only `filatelia-web/src/lib/auth.ts` calls those Worker routes. No other consumer found.

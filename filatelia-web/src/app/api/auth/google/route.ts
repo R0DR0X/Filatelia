@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateOAuthState, verifyOAuthState, getGoogleAuthUrl, exchangeCodeForToken, getGoogleUserProfile } from "@/lib/auth-google";
-import { signSession } from "@/lib/session";
+import { signSession, SESSION_TTL_SECONDS } from "@/lib/session";
+import { upsertGoogleUser, GoogleEmailUnverifiedError } from "@/lib/db/users";
 
 export const runtime = 'edge';
 
@@ -37,12 +38,25 @@ export async function GET(request: NextRequest) {
     const tokenData = await exchangeCodeForToken(code, redirectUri);
     const googleUser = await getGoogleUserProfile(tokenData.access_token);
 
-    const userPayload = {
-      id: `usr_${googleUser.id}`,
-      name: googleUser.name,
+    // Upsert by email: a returning email reuses its D1 row and resolved role
+    // (e.g. the admin account); a first-time email creates a new row. This
+    // replaces the previous ephemeral, unpersisted identity.
+    //
+    // `verified_email` is forwarded because email is the account key here: an
+    // unverified Google email must not adopt or create a row. See
+    // upsertGoogleUser for the full pre-hijacking rationale.
+    const dbUser = await upsertGoogleUser({
       email: googleUser.email,
+      name: googleUser.name,
+      verifiedEmail: googleUser.verified_email === true,
+    });
+
+    const userPayload = {
+      id: dbUser.id,
+      name: dbUser.name || googleUser.name,
+      email: dbUser.email,
       picture: googleUser.picture,
-      role: "collector",
+      role: dbUser.role,
     };
 
     const response = NextResponse.redirect(new URL("/perfil", request.url));
@@ -53,7 +67,7 @@ export async function GET(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: SESSION_TTL_SECONDS,
     });
 
     // Clear state cookie
@@ -61,6 +75,12 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (error: any) {
+    if (error instanceof GoogleEmailUnverifiedError) {
+      return NextResponse.json(
+        { error: "Google no ha verificado este correo electrónico." },
+        { status: 403 }
+      );
+    }
     return NextResponse.json({ error: error.message || "Authentication failed" }, { status: 500 });
   }
 }

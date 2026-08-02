@@ -76,8 +76,11 @@ never read from a `role` column on `User` (no such column exists).
 - THEN the `role` claim SHOULD default to `collector`
 
 ### Requirement: Session Issuance and Expiry
-`signSession` MUST include an `exp` claim. Recommended default: 7 days, no sliding
-renewal (open decision — revisit if product wants longer/renewing sessions).
+`signSession` MUST include an `exp` claim. Decided: 30-day lifetime with SLIDING
+RENEWAL — every authenticated request that passes through `src/middleware.ts`
+reissues `fp_session` with a fresh `iat`/`exp` computed at that moment, so an
+active session never expires mid-use. `signSession` is the sole source of
+`iat`/`exp`; it discards any caller-supplied values and always computes its own.
 `APP_SECRET` MUST be a required environment value with no fallback in production;
 the app MUST fail fast at startup if it is unset in a production environment.
 
@@ -156,6 +159,11 @@ to `fp_session` (per rollback ordering in the proposal).
 
 ## Open Decisions (named, not silently resolved)
 
-- Session lifetime: recommended default 7 days, no sliding renewal, pending product confirmation.
-- Registration gating: recommended default is open registration (matches current unauthenticated Google signup behavior); gate later if catalog completeness requires it.
+- Session lifetime: DECIDED — 30 days, sliding renewal on every authenticated
+  request through `src/middleware.ts` (protected pages: `/admin/:path*`,
+  `/perfil`). API routes that call `verifySession` directly
+  (`/api/collection`, `/api/match`, `/api/bids`) do NOT currently renew the
+  cookie on their own responses — renewal happens at the middleware layer
+  only. Revisit if product wants renewal on every API call too.
+- Registration gating: DECIDED — open to anyone, no invitation gating.
 - `emailVerified` is NULL for the existing row; this spec does NOT block login on verification status — an unverified account MAY authenticate. Revisit if verification enforcement becomes a requirement.

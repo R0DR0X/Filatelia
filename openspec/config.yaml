@@ -1,0 +1,61 @@
+schema: spec-driven
+
+context: |
+  Monorepo: Next.js 16 app (filatelia-web/, Cloudflare Pages) + Hono Worker API
+  (workers/filatelia-api/, Cloudflare D1/R2/Vectorize/AI) + Python/Node scrapers
+  (scrapers/, Playwright/Chromium against Colnect) + legacy root-level Node
+  pipeline scripts (mjs) with node:test.
+  Architecture: Cloudflare edge (Pages + Workers + D1 + R2 + Vectorize + Workers AI).
+  Testing: vitest (filatelia-web), vitest declared but unwired (workers/filatelia-api),
+  node --test (root mjs pipeline), standalone python3 scripts (scrapers, no pytest).
+  Style: TypeScript strict-ish, ESLint 9 flat config, Tailwind 4, Zustand 5.
+
+strict_tdd: true
+
+testing:
+  filatelia-web:
+    runner: vitest
+    command: "npx vitest run"
+    config: filatelia-web/vitest.config.ts
+    note: "no npm test script wired; vitest.config.ts + test/**/*.test.ts and src/test/**/*.test.ts exist and run"
+  workers-filatelia-api:
+    runner: vitest (declared in test file, NOT installed/wired)
+    command: "UNVERIFIED — vitest not in devDependencies/node_modules, no test script in package.json"
+    config: none
+    note: "workers/filatelia-api/test/query-endpoint.test.ts imports vitest but the package has no vitest dependency, no vitest config, and no test script; currently unrunnable as-is"
+  root-node-pipeline:
+    runner: node:test
+    command: "node --test test/*.test.mjs"
+    config: package.json scripts.test
+    note: "root-level test/ dir covers scraper-adjacent mjs/ts pipeline code (ai-enricher, auctions, r2, embeddings, etc.)"
+  scrapers-python:
+    runner: none (pytest not installed)
+    command: "python3 scrapers/<test_file>.py"
+    config: none
+    note: "no pytest.ini/pyproject.toml/conftest.py; test_*.py are standalone scripts with their own assertions, executed directly via python3 and expected to exit non-zero on failure"
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Call out which of the four test surfaces (filatelia-web vitest, workers/filatelia-api, root node:test, scrapers python) are affected
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing code patterns
+      - Strict TDD is enabled: write a failing test first (vitest, node:test, or python3 assertion script per surface) before implementation code
+    tdd: true
+    test_command: "cd filatelia-web && npx vitest run"
+  verify:
+    test_command: "cd filatelia-web && npx vitest run && cd ../workers/filatelia-api && (npx vitest run || echo WORKER_TESTS_UNWIRED) && cd ../.. && node --test test/*.test.mjs"
+    build_command: "cd filatelia-web && npm run build"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas

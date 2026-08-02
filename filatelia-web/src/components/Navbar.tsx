@@ -5,20 +5,41 @@ import { usePathname } from "next/navigation";
 import { ShoppingCart, Search, Menu, User, ChevronDown, LogOut, LayoutDashboard } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useCartStore } from "@/store/useCartStore";
-import { getCachedUser, logout } from "@/lib/auth";
+import { getMe, logout } from "@/lib/auth";
 import type { AuthUser } from "@/lib/auth";
+
+// Identity is resolved asynchronously (the `fp_session` cookie is httpOnly,
+// so nothing can be read synchronously on first paint). Until `/api/auth/me`
+// answers, the nav must assert NEITHER state: rendering the logged-out icon
+// while unknown makes every authenticated visitor flash "logged out" — and
+// the admin link disappear — on every hard page load.
+type NavIdentity =
+  | { status: "unknown" }
+  | { status: "authenticated"; user: AuthUser }
+  | { status: "anonymous" };
 
 export default function Navbar() {
   const itemCount = useCartStore((state) => state.getItemCount());
   const openCart = useCartStore((state) => state.openCart);
   const pathname = usePathname();
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [identity, setIdentity] = useState<NavIdentity>({ status: "unknown" });
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const user = identity.status === "authenticated" ? identity.user : null;
+
   useEffect(() => {
-    setUser(getCachedUser());
+    getMe().then((result) => {
+      // `unavailable` = the probe failed (offline, 5xx, timeout). Keep the
+      // previous state instead of demoting the visitor to anonymous.
+      if (result.status === "unavailable") return;
+      setIdentity(
+        result.status === "authenticated"
+          ? { status: "authenticated", user: result.user }
+          : { status: "anonymous" }
+      );
+    });
   }, []);
 
   // Close dropdown on click outside
@@ -34,7 +55,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     await logout();
-    setUser(null);
+    setIdentity({ status: "anonymous" });
     setDropdownOpen(false);
     window.location.href = "/";
   };
@@ -126,10 +147,19 @@ export default function Navbar() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : identity.status === "anonymous" ? (
             <Link href="/login" className="text-zinc-400 hover:text-white transition-colors">
               <User size={20} />
             </Link>
+          ) : (
+            // Identity still unknown: neutral placeholder, same footprint as
+            // the avatar, following the `animate-pulse` skeleton convention
+            // used by the route-level `loading.tsx` files.
+            <div
+              role="status"
+              aria-label="Verificando sesión"
+              className="w-8 h-8 rounded-full bg-zinc-800/80 border border-white/5 animate-pulse"
+            />
           )}
 
           <button
@@ -167,7 +197,7 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {!user && (
+            {identity.status === "anonymous" && (
               <Link
                 href="/login"
                 onClick={() => setMobileOpen(false)}

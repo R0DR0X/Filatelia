@@ -2,17 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { Eye, TrendingUp, Calendar } from "lucide-react";
-
-const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
+import { adminFetch } from "@/lib/adminApi";
 
 export default function AnaliticaPage() {
   const [stats, setStats] = useState({ visitsToday: 0, visitsAllTime: 0, topPaths: [] as any[] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("fp_token") : null;
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    fetch(`${API}/analytics/stats`, { headers })
+    adminFetch("analytics/stats")
       .then((r) => r.json())
       .then((d) => {
         setStats({

@@ -44,23 +44,14 @@ export default function BidModal({ auction, isOpen, onClose, onBidSuccess }: Bid
     setLoading(true);
 
     try {
-      // Fetch token or user from local storage
-      let userToken = "";
-      let userName = "Coleccionista";
-      if (typeof window !== "undefined") {
-        userToken = localStorage.getItem("fp_token") || "";
-        const u = localStorage.getItem("fp_user");
-        if (u) {
-          try { userName = JSON.parse(u).name || "Coleccionista"; } catch {}
-        }
-      }
-
+      // Identity is not read here at all: `/api/bids` derives the bidder
+      // solely from the verified `fp_session` cookie (sent automatically by
+      // `credentials: "same-origin"`), never from caller-supplied headers.
       const res = await fetch("/api/bids", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(userToken ? { Authorization: `Bearer ${userToken}` } : {}),
-          "X-User-Name": userName,
         },
         body: JSON.stringify({
           auctionId: auction.id,

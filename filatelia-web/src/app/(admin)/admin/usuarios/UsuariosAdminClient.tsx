@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Shield, UserX } from "lucide-react";
-
-const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
+import { Loader2, Shield, UserX, AlertCircle } from "lucide-react";
+import { adminFetch, adminErrorMessage } from "@/lib/adminApi";
 
 interface User {
   id: string;
@@ -16,44 +15,58 @@ interface User {
 export default function UsuariosAdminClient() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  // Any admin call can fail (expired session, missing proxy config, upstream
+  // timeout). Failures are shown here instead of being swallowed; the table
+  // is only refetched when the mutation actually succeeded.
+  const [error, setError] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    const token = localStorage.getItem("fp_token");
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     try {
-      const res = await fetch(`${API}/admin/users`, { headers });
+      const res = await adminFetch("users");
       const data = await res.json();
       setUsers(data.users || []);
-    } catch { /* ignore */ }
+    } catch (e) { setError(adminErrorMessage(e)); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const handleRoleChange = async (userId: string, newRole: string) => {
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/user/${userId}/role`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ role: newRole }),
-    });
+    setError(null);
+    try {
+      await adminFetch(`user/${userId}/role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+    } catch (e) {
+      setError(adminErrorMessage(e));
+      return;
+    }
     fetchUsers();
   };
 
   const handleDelete = async (userId: string) => {
     if (!confirm("¿Eliminar este usuario?")) return;
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/user/${userId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    setError(null);
+    try {
+      await adminFetch(`user/${userId}`, { method: "DELETE" });
+    } catch (e) {
+      setError(adminErrorMessage(e));
+      return;
+    }
     fetchUsers();
   };
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-serif">Gestión de Usuarios</h2>
+      {error && (
+        <div role="alert" className="flex items-center gap-2 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-400">
+          <AlertCircle size={16} /> {error}
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 size={32} className="text-moss-green animate-spin" /></div>
       ) : (

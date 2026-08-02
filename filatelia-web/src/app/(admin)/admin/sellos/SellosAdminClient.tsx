@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Pencil, Trash2, Loader2, X, Check } from "lucide-react";
+import { Search, Pencil, Trash2, Loader2, X, Check, AlertCircle } from "lucide-react";
 import Image from "next/image";
-
-const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
+import { adminFetch, adminErrorMessage } from "@/lib/adminApi";
 
 interface Stamp {
   id: string;
@@ -26,20 +25,22 @@ export default function SellosAdminClient() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Stamp | null>(null);
   const [saving, setSaving] = useState(false);
+  // Any admin call can fail (expired session, missing proxy config, upstream
+  // timeout). Failures are shown here instead of being swallowed, and the
+  // edit modal stays open with its buffer intact so no input is lost.
+  const [error, setError] = useState<string | null>(null);
   const limit = 20;
 
   const fetchStamps = useCallback(async () => {
     setLoading(true);
-    const token = localStorage.getItem("fp_token");
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (search) params.set("search", search);
     try {
-      const res = await fetch(`${API}/admin/stamps?${params}`, { headers });
+      const res = await adminFetch(`stamps?${params}`);
       const data = await res.json();
       setStamps(data.stamps || []);
       setTotal(data.pagination?.total || 0);
-    } catch { /* ignore */ }
+    } catch (e) { setError(adminErrorMessage(e)); }
     finally { setLoading(false); }
   }, [page, search]);
 
@@ -47,32 +48,39 @@ export default function SellosAdminClient() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar este sello?")) return;
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/stamp/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    setError(null);
+    try {
+      await adminFetch(`stamp/${id}`, { method: "DELETE" });
+    } catch (e) {
+      setError(adminErrorMessage(e));
+      return;
+    }
     fetchStamps();
   };
 
   const handleSave = async () => {
     if (!editing) return;
     setSaving(true);
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/stamp/${editing.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        nameEs: editing.nameEs,
-        nameEn: editing.nameEn,
-        scottNumber: editing.wnsNumber,
-        marketPriceUsd: editing.marketPriceUsd,
-        theme: editing.theme,
-      }),
-    });
-    setSaving(false);
-    setEditing(null);
-    fetchStamps();
+    setError(null);
+    try {
+      await adminFetch(`stamp/${editing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nameEs: editing.nameEs,
+          nameEn: editing.nameEn,
+          scottNumber: editing.wnsNumber,
+          marketPriceUsd: editing.marketPriceUsd,
+          theme: editing.theme,
+        }),
+      });
+      setEditing(null);
+      fetchStamps();
+    } catch (e) {
+      setError(adminErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -93,6 +101,12 @@ export default function SellosAdminClient() {
       </div>
 
       <div className="text-sm text-zinc-500">{total.toLocaleString()} sellos</div>
+
+      {error && (
+        <div role="alert" className="flex items-center gap-2 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-400">
+          <AlertCircle size={16} /> {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 size={32} className="text-moss-green animate-spin" /></div>
@@ -177,6 +191,11 @@ export default function SellosAdminClient() {
                 <input value={editing.theme || ""} onChange={(e) => setEditing({ ...editing, theme: e.target.value })} className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-moss-green" />
               </div>
             </div>
+            {error && (
+              <div role="alert" className="mt-4 flex items-center gap-2 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-400">
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setEditing(null)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-moss-green hover:bg-moss-green-dark text-white text-sm font-bold rounded-lg flex items-center gap-2">

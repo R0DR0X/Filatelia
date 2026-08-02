@@ -2,21 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { BookOpen, TrendingUp, Eye, Loader2 } from "lucide-react";
-
-const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
+import { adminFetch } from "@/lib/adminApi";
 
 export default function DashboardClient() {
   const [stats, setStats] = useState({ totalStamps: 0, visitsToday: 0, visitsAllTime: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("fp_token") : null;
     async function fetchStats() {
       try {
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const [stampsRes, analyticsRes] = await Promise.all([
-          fetch(`${API}/admin/stamps?limit=1`, { headers }),
-          fetch(`${API}/analytics/stats`, { headers }),
+          adminFetch("stamps?limit=1"),
+          adminFetch("analytics/stats"),
         ]);
         const stampsData = await stampsRes.json();
         const analyticsData = await analyticsRes.json();

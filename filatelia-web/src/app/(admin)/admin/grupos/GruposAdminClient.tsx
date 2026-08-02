@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Pencil, Trash2, Loader2, X, Check, Plus } from "lucide-react";
-
-const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
+import { Pencil, Trash2, Loader2, X, Check, Plus, AlertCircle } from "lucide-react";
+import { adminFetch, adminErrorMessage } from "@/lib/adminApi";
 
 interface Group {
   id: string;
@@ -19,16 +18,18 @@ export default function GruposAdminClient() {
   const [editing, setEditing] = useState<Group | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Any admin call can fail (expired session, missing proxy config, upstream
+  // timeout). Failures are shown here instead of being swallowed, and the
+  // edit modal stays open with its buffer intact so no input is lost.
+  const [error, setError] = useState<string | null>(null);
 
   const fetchGroups = useCallback(async () => {
     setLoading(true);
-    const token = localStorage.getItem("fp_token");
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     try {
-      const res = await fetch(`${API}/admin/groups`, { headers });
+      const res = await adminFetch("groups");
       const data = await res.json();
       setGroups(data.groups || []);
-    } catch { /* ignore */ }
+    } catch (e) { setError(adminErrorMessage(e)); }
     finally { setLoading(false); }
   }, []);
 
@@ -36,36 +37,51 @@ export default function GruposAdminClient() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar este grupo y sus sellos?")) return;
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/group/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    setError(null);
+    try {
+      await adminFetch(`group/${id}`, { method: "DELETE" });
+    } catch (e) {
+      setError(adminErrorMessage(e));
+      return;
+    }
     fetchGroups();
   };
 
   const handleSave = async () => {
     if (!editing) return;
     setSaving(true);
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/group/${editing.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ titleEs: editing.titleEs, titleEn: editing.titleEn, year: editing.year, catalogId: editing.catalogId }),
-    });
-    setSaving(false);
-    setEditing(null);
-    fetchGroups();
+    setError(null);
+    try {
+      await adminFetch(`group/${editing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ titleEs: editing.titleEs, titleEn: editing.titleEn, year: editing.year, catalogId: editing.catalogId }),
+      });
+      setEditing(null);
+      fetchGroups();
+    } catch (e) {
+      setError(adminErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCreate = async () => {
     setSaving(true);
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/group`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ catalogId: "cat-scraper-global", titleEs: "Nuevo Grupo", titleEn: "New Group", year: new Date().getFullYear() }),
-    });
-    setSaving(false);
-    setCreating(false);
-    fetchGroups();
+    setError(null);
+    try {
+      await adminFetch("group", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ catalogId: "cat-scraper-global", titleEs: "Nuevo Grupo", titleEn: "New Group", year: new Date().getFullYear() }),
+      });
+      setCreating(false);
+      fetchGroups();
+    } catch (e) {
+      setError(adminErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -74,6 +90,11 @@ export default function GruposAdminClient() {
         <h2 className="text-xl font-serif">Grupos de Emisión</h2>
         <button onClick={() => { setCreating(true); setEditing({ id: "", titleEs: "", titleEn: "", year: null, catalogId: "cat-scraper-global" }); }} className="px-4 py-2 bg-moss-green text-white text-xs font-bold uppercase tracking-wider rounded-lg flex items-center gap-2"><Plus size={14} /> Nuevo Grupo</button>
       </div>
+      {error && (
+        <div role="alert" className="flex items-center gap-2 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-400">
+          <AlertCircle size={16} /> {error}
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 size={32} className="text-moss-green animate-spin" /></div>
       ) : (
@@ -102,6 +123,11 @@ export default function GruposAdminClient() {
               <div><label className="block text-xs text-zinc-500 mb-1">Título (EN)</label><input value={editing.titleEn || ""} onChange={(e) => setEditing({ ...editing, titleEn: e.target.value })} className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-moss-green" /></div>
               <div><label className="block text-xs text-zinc-500 mb-1">Año</label><input type="number" value={editing.year || ""} onChange={(e) => setEditing({ ...editing, year: parseInt(e.target.value) || null })} className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-moss-green" /></div>
             </div>
+            {error && (
+              <div role="alert" className="mt-4 flex items-center gap-2 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-400">
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => { setEditing(null); setCreating(false); }} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={creating ? handleCreate : handleSave} disabled={saving} className="px-6 py-2 bg-moss-green text-white text-sm font-bold rounded-lg flex items-center gap-2">{saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Guardar</button>

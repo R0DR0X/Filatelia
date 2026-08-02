@@ -99,11 +99,16 @@ export default function PerfilClient() {
   const [loadingMatches, setLoadingMatches] = useState(false);
 
   useEffect(() => {
-    getMe().then((u) => {
-      if (!u) {
+    getMe().then((result) => {
+      // This page has nothing to render without an identity, so both
+      // `anonymous` (authoritative 401) and `unavailable` (transient
+      // failure) send the visitor to /login — the login page re-probes the
+      // session, so a blip costs a redirect, never a wrong logged-in view.
+      if (result.status !== "authenticated") {
         router.push("/login?from=/perfil");
         return;
       }
+      const u = result.user;
       setUser(u);
       
       if (typeof window !== "undefined") {

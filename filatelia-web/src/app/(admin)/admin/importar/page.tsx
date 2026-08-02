@@ -2,8 +2,7 @@
 
 import { useState, useRef } from "react";
 import { FileUp, AlertCircle, CheckCircle2, Loader2, FileSpreadsheet, Download } from "lucide-react";
-
-const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
+import { adminFetch } from "@/lib/adminApi";
 
 export default function ImportPage() {
   const [isUploading, setIsUploading] = useState(false);
@@ -69,10 +68,9 @@ export default function ImportPage() {
           theme: row.theme || row.Theme || null,
         }));
 
-        const token = localStorage.getItem("fp_token");
-        const res = await fetch(`${API}/import-stamp`, {
+        const res = await adminFetch("import-stamp", {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(batch),
         });
         const data = await res.json();

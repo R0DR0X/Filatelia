@@ -80,10 +80,87 @@ recorded as an explicit open decision in the spec, not a silent gap.
 
 - [x] 4.1 RED: proxy 403 without `role==="admin"`; forwards with `X-Admin-Token` when authorized — `filatelia-web/test/admin-proxy-api.test.ts`
 - [x] 4.2 GREEN: create `src/app/api/admin/[...path]/route.ts`
-- [ ] 4.3 RED: `lib/auth.ts` no longer reads/writes `fp_token`/`fp_user`
-- [ ] 4.4 GREEN: rewrite `src/lib/auth.ts` to call Next routes only
-- [ ] 4.5 RED: 7 admin clients + `BidModal.tsx` contain no `fp_token`/localStorage reads
-- [ ] 4.6 GREEN: migrate the 7 admin pages + `BidModal.tsx` to `fp_session`/proxy calls
+- [x] 4.3 RED: `lib/auth.ts` no longer reads/writes `fp_token`/`fp_user` — `filatelia-web/test/auth-lib.test.ts` (source-scan for `localStorage`/`workers.dev`, functional tests asserting calls to `/api/auth/*`)
+- [x] 4.4 GREEN: rewrite `src/lib/auth.ts` to call Next routes only — `login`/`register`/`logout`/`getMe` now call `/api/auth/login|register|logout|me` with `credentials: "same-origin"`; no `localStorage`/Worker reference remains
+- [x] 4.5 RED: 7 admin clients + `BidModal.tsx` contain no `fp_token`/localStorage reads — `filatelia-web/test/admin-clients-migration.test.ts` (source-scan across all 8 files) + `filatelia-web/test/admin-api-client.test.ts` (behavioral test for the shared `adminFetch` call shape)
+- [x] 4.6 GREEN: migrate the 7 admin pages + `BidModal.tsx` to `fp_session`/proxy calls — see deviation notes below
+
+## Deviation note: `GET /api/auth/me` was created, not dropped
+
+The design's File Changes table implied `lib/auth.ts` could simply stop
+calling Worker `/auth/*` without a replacement for `/auth/me`. In practice
+`getMe()` is a load-bearing export with 2 consumers (`PerfilClient.tsx`,
+and now `Navbar.tsx` — see the `getCachedUser` note below), so a same-origin
+equivalent had to exist first. Created `filatelia-web/src/app/api/auth/me/route.ts`:
+verifies `fp_session`, re-reads the row from D1 by id (`findUserById`, added
+to `src/lib/db/users.ts`) rather than trusting the token's baked-in claims,
+and returns `{success:true, user:{id,name,email,role}}` or 401.
+
+## Deviation note: `getCachedUser()` removed, not kept as a stub
+
+`getCachedUser()` was a synchronous, localStorage-backed read. Since
+`fp_session` is httpOnly, there is no synchronous, storage-free way to serve
+the same contract — so it was deleted rather than kept under the same name
+backed by something else. Its only caller, `Navbar.tsx`, now calls the
+already-async `getMe()` in a `useEffect`, the same pattern `PerfilClient.tsx`
+already used.
+
+## Deviation note: shared `adminFetch` helper introduced
+
+All 7 admin clients shared one call shape (same-origin `/api/admin/<subpath>`,
+`credentials: "same-origin"`, no `Authorization` header). Rather than
+duplicate that shape 7 times, `filatelia-web/src/lib/adminApi.ts` exports
+`adminFetch(subpath, init)`. This also gave the migration a testable seam:
+the repo has no DOM/component-rendering test setup (no jsdom/testing-library
+dependency), so the 7 `.tsx` admin clients themselves cannot be rendered and
+exercised in `vitest run` (environment: `node`). `adminFetch` is unit-tested
+directly (`test/admin-api-client.test.ts`); the clients are covered by a
+source-scan test confirming they call it and hold no `fp_token`/localStorage
+reference (`test/admin-clients-migration.test.ts`).
+
+## Deviation note: `BidModal.tsx` does not go through the admin proxy
+
+`BidModal.tsx` is not an admin surface — it POSTs to `/api/bids`, which
+already (commit `08e3fe4`) derives the bidder solely from the verified
+`fp_session` cookie and ignores caller-supplied `Authorization`/`X-User-Name`
+headers entirely. Its old `fp_token`/`fp_user` reads and both headers were
+therefore already dead weight before this change; they are now removed and
+the fetch call carries `credentials: "same-origin"` explicitly instead.
+
+## Closed gap: `/analytics/stats` and `/import-stamp` are now reachable through the admin proxy (Worker-side addendum, applied)
+
+The gap originally noted here (both calls 404ing through the proxy) has been
+closed with a Worker-side addendum in `workers/filatelia-api/src/index.ts`.
+While investigating it, `POST /import-stamp` was found to have **no
+authentication at all** — anyone on the internet could bulk-insert/update
+rows in the production D1 `Stamp` table. That is now fixed as part of the
+same change:
+
+- `POST /import-stamp` is guarded by the existing `requireAdmin` (403 when
+  unauthorized), exactly like the `/admin/*` routes. The handler body was
+  extracted into a shared `importStampHandler` function registered on both
+  `/import-stamp` (used by the scrapers) and the new `/admin/import-stamp`
+  (reachable through the Next admin proxy), so the two routes cannot drift.
+- `GET /analytics/stats` had its hand-rolled inline admin check (duplicated
+  role/email/first-user logic) replaced with `requireAdmin`, so there is one
+  admin authority in the file. Its handler was likewise extracted into
+  `analyticsStatsHandler` and registered on both `/analytics/stats` and the
+  new `/admin/analytics/stats`.
+- The three scrapers (`01-wikidata-scraper.mjs`, `02-wns-scraper.mjs`,
+  `03-colnect-scraper.mjs`) now send `X-Admin-Token: process.env.ADMIN_API_TOKEN`
+  on every `/import-stamp` POST (shared helper: `scrapers/lib/admin-token.mjs`),
+  and fail fast at startup with a clear message if the variable is unset,
+  instead of discovering every write 403s after a full unattended crawl.
+- `scrapers/README.md` no longer describes `/import-stamp` as an
+  unauthenticated "secure endpoint"; it documents the `ADMIN_API_TOKEN`
+  requirement and how to set it for a local/VPS scraper run.
+- Regression tests: `workers/filatelia-api/test/import-stamp-admin.test.ts`
+  (403 with no credentials on both `/import-stamp` and `/admin/import-stamp`;
+  not-403 with a correct `X-Admin-Token`; same for `/admin/analytics/stats`).
+
+Both migrated admin-UI call sites (`analitica/page.tsx`, `DashboardClient.tsx`
+→ `adminFetch("analytics/stats")`; `importar/page.tsx` →
+`adminFetch("import-stamp")`) now resolve through the proxy instead of 404ing.
 
 ## Phase 5: Worker Auth Removal (PR4, last)
 

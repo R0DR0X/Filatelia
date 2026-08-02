@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Pencil, Trash2, Loader2, X, Check, Plus } from "lucide-react";
-
-const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
+import { Pencil, Trash2, Loader2, X, Check, Plus, AlertCircle } from "lucide-react";
+import { adminFetch, adminErrorMessage } from "@/lib/adminApi";
 
 interface Catalog {
   id: string;
@@ -20,16 +19,18 @@ export default function CatalogosAdminClient() {
   const [editing, setEditing] = useState<Catalog | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Any admin call can fail (expired session, missing proxy config, upstream
+  // timeout). Failures are shown here instead of being swallowed, and the
+  // edit modal stays open with its buffer intact so no input is lost.
+  const [error, setError] = useState<string | null>(null);
 
   const fetchCatalogs = useCallback(async () => {
     setLoading(true);
-    const token = localStorage.getItem("fp_token");
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     try {
-      const res = await fetch(`${API}/admin/catalogs`, { headers });
+      const res = await adminFetch("catalogs");
       const data = await res.json();
       setCatalogs(data.catalogs || []);
-    } catch { /* ignore */ }
+    } catch (e) { setError(adminErrorMessage(e)); }
     finally { setLoading(false); }
   }, []);
 
@@ -37,40 +38,56 @@ export default function CatalogosAdminClient() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Eliminar este catálogo?")) return;
-    const token = localStorage.getItem("fp_token");
+    setError(null);
     try {
-      const res = await fetch(`${API}/admin/catalog/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const res = await adminFetch(`catalog/${id}`, { method: "DELETE" });
       const data = await res.json();
-      if (!data.success) alert(data.error || "Error al eliminar");
-    } catch { /* ignore */ }
+      if (!data.success) {
+        setError(data.error || "No se pudo eliminar el catálogo.");
+        return;
+      }
+    } catch (e) {
+      setError(adminErrorMessage(e));
+      return;
+    }
     fetchCatalogs();
   };
 
   const handleSave = async () => {
     if (!editing) return;
     setSaving(true);
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/catalog/${editing.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: editing.name, description: editing.description, yearStart: editing.yearStart, yearEnd: editing.yearEnd, status: editing.status }),
-    });
-    setSaving(false);
-    setEditing(null);
-    fetchCatalogs();
+    setError(null);
+    try {
+      await adminFetch(`catalog/${editing.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editing.name, description: editing.description, yearStart: editing.yearStart, yearEnd: editing.yearEnd, status: editing.status }),
+      });
+      setEditing(null);
+      fetchCatalogs();
+    } catch (e) {
+      setError(adminErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCreate = async () => {
     setSaving(true);
-    const token = localStorage.getItem("fp_token");
-    await fetch(`${API}/admin/catalog`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: "Nuevo Catálogo", description: "", yearStart: null, yearEnd: null }),
-    });
-    setSaving(false);
-    setCreating(false);
-    fetchCatalogs();
+    setError(null);
+    try {
+      await adminFetch("catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Nuevo Catálogo", description: "", yearStart: null, yearEnd: null }),
+      });
+      setCreating(false);
+      fetchCatalogs();
+    } catch (e) {
+      setError(adminErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -79,6 +96,11 @@ export default function CatalogosAdminClient() {
         <h2 className="text-xl font-serif">Catálogos</h2>
         <button onClick={() => { setCreating(true); setEditing({ id: "", name: "", description: "", yearStart: null, yearEnd: null, status: "activo" }); }} className="px-4 py-2 bg-moss-green text-white text-xs font-bold uppercase tracking-wider rounded-lg flex items-center gap-2"><Plus size={14} /> Nuevo Catálogo</button>
       </div>
+      {error && (
+        <div role="alert" className="flex items-center gap-2 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-400">
+          <AlertCircle size={16} /> {error}
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 size={32} className="text-moss-green animate-spin" /></div>
       ) : (
@@ -112,6 +134,11 @@ export default function CatalogosAdminClient() {
               </div>
               <div><label className="block text-xs text-zinc-500 mb-1">Estado</label><select value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value })} className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-moss-green"><option value="activo">Activo</option><option value="inactive">Inactivo</option><option value="draft">Borrador</option></select></div>
             </div>
+            {error && (
+              <div role="alert" className="mt-4 flex items-center gap-2 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-sm text-red-400">
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => { setEditing(null); setCreating(false); }} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancelar</button>
               <button onClick={creating ? handleCreate : handleSave} disabled={saving} className="px-6 py-2 bg-moss-green text-white text-sm font-bold rounded-lg flex items-center gap-2">{saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Guardar</button>

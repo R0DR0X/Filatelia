@@ -56,6 +56,16 @@ export async function findUserByEmail(email: string): Promise<AuthUserRecord | n
   return { id: row.id, name: row.name ?? null, email: row.email, password: row.password ?? null, role };
 }
 
+/** Finds a User row by id and attaches its resolved role. Null if absent. */
+export async function findUserById(id: string): Promise<AuthUserRecord | null> {
+  const d1 = getD1();
+  const row = await d1.prepare('SELECT id, name, email, password FROM User WHERE id = ?').bind(id).first();
+  if (!row) return null;
+
+  const role = await resolveUserRole(row.id);
+  return { id: row.id, name: row.name ?? null, email: row.email, password: row.password ?? null, role };
+}
+
 /** Creates a new User row with a pre-hashed password. No role row -> "collector". */
 export async function createUser(params: {
   name: string;

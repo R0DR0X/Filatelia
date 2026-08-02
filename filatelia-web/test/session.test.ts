@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { signSession, verifySession, SESSION_TTL_SECONDS } from "../src/lib/session";
 
 // Dev-only fallback secret used by session.ts outside production. Not a real
@@ -66,16 +66,64 @@ describe("session exp issuance (30-day sliding lifetime)", () => {
   });
 });
 
-describe("APP_SECRET fail-fast in production", () => {
-  it("throws instead of signing when NODE_ENV=production and APP_SECRET is unset", async () => {
-    const originalEnv = process.env.NODE_ENV;
+describe("session verification rejects invalid signatures", () => {
+  it("rejects a validly-signed token whose payload segment was mutated after signing (tampered cookie)", async () => {
+    const token = await signSession({ id: "usr_1" });
+    const [headerB64, payloadB64, signatureB64] = token.split(".");
+
+    const decodedPayload = JSON.parse(
+      Buffer.from(payloadB64.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
+    );
+    const tamperedPayload = { ...decodedPayload, id: "usr_attacker" };
+    const tamperedPayloadB64 = base64UrlEncode(
+      new TextEncoder().encode(JSON.stringify(tamperedPayload)).buffer as ArrayBuffer
+    );
+    const tamperedToken = `${headerB64}.${tamperedPayloadB64}.${signatureB64}`;
+
+    const payload = await verifySession(tamperedToken);
+    expect(payload).toBeNull();
+  });
+
+  it("rejects a cookie signed with a different APP_SECRET than the one currently configured", async () => {
     const originalSecret = process.env.APP_SECRET;
-    process.env.NODE_ENV = "production";
+    process.env.APP_SECRET = "old-rotated-secret";
+    let tokenSignedWithOldSecret: string;
+    try {
+      tokenSignedWithOldSecret = await signSession({ id: "usr_1" });
+    } finally {
+      if (originalSecret !== undefined) {
+        process.env.APP_SECRET = originalSecret;
+      } else {
+        delete process.env.APP_SECRET;
+      }
+    }
+
+    process.env.APP_SECRET = "new-current-secret";
+    try {
+      const payload = await verifySession(tokenSignedWithOldSecret);
+      expect(payload).toBeNull();
+    } finally {
+      if (originalSecret !== undefined) {
+        process.env.APP_SECRET = originalSecret;
+      } else {
+        delete process.env.APP_SECRET;
+      }
+    }
+  });
+});
+
+describe("APP_SECRET fail-fast in production", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("throws instead of signing when NODE_ENV=production and APP_SECRET is unset", async () => {
+    const originalSecret = process.env.APP_SECRET;
+    vi.stubEnv("NODE_ENV", "production");
     delete process.env.APP_SECRET;
     try {
       await expect(signSession({ id: "usr_1" })).rejects.toThrow();
     } finally {
-      process.env.NODE_ENV = originalEnv;
       if (originalSecret !== undefined) process.env.APP_SECRET = originalSecret;
     }
   });

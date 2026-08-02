@@ -41,3 +41,31 @@ describe("middleware sliding session renewal", () => {
     expect(response.cookies.get("fp_session")).toBeUndefined();
   });
 });
+
+describe("middleware admin role gate", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("refuses a valid non-admin session on an /admin path", async () => {
+    const token = await signSession({ id: "usr_1", role: "collector" });
+
+    const response = await middleware(protectedRequest("/admin/dashboard", token));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("/login");
+  });
+
+  it("allows a valid admin session on an /admin path", async () => {
+    const token = await signSession({ id: "usr_admin", role: "admin" });
+
+    const response = await middleware(protectedRequest("/admin/dashboard", token));
+
+    expect(response.status).not.toBe(307);
+    const renewedCookie = response.cookies.get("fp_session")?.value;
+    expect(renewedCookie).toBeTruthy();
+    const renewedPayload = await verifySession(renewedCookie as string);
+    expect(renewedPayload).not.toBeNull();
+    expect(renewedPayload.role).toBe("admin");
+  });
+});

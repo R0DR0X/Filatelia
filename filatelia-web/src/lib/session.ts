@@ -40,8 +40,8 @@ async function getSecretKey() {
   );
 }
 
-function base64UrlEncode(arrayBuffer: ArrayBuffer) {
-  return btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+function base64UrlEncode(bytes: Uint8Array<ArrayBuffer>) {
+  return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
@@ -90,7 +90,7 @@ export async function signSession(
     key,
     enc.encode(dataToSign)
   );
-  const signatureB64 = base64UrlEncode(signatureBuffer);
+  const signatureB64 = base64UrlEncode(new Uint8Array(signatureBuffer));
 
   return `${dataToSign}.${signatureB64}`;
 }

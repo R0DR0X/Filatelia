@@ -19,14 +19,14 @@ function toHex(bytes: Uint8Array): string {
     .join('');
 }
 
-function fromHex(hex: string): Uint8Array | null {
+function fromHex(hex: string): Uint8Array<ArrayBuffer> | null {
   if (!/^[0-9a-f]+$/i.test(hex) || hex.length % 2 !== 0) return null;
   const matches = hex.match(/.{2}/g);
   if (!matches) return null;
   return new Uint8Array(matches.map((byte) => parseInt(byte, 16)));
 }
 
-async function deriveBits(password: string, salt: Uint8Array): Promise<Uint8Array> {
+async function deriveBits(password: string, salt: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(

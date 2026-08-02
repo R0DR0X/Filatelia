@@ -1,30 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { placeBid } from "@/lib/db/auctions";
+import { verifySession } from "@/lib/session";
 
 export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Authentication check
-    const authHeader = request.headers.get("authorization");
-    const cookieToken = request.cookies.get("fp_session")?.value;
-    const headerUserId = request.headers.get("x-user-id");
-    const headerUserName = request.headers.get("x-user-name");
+    // 1. Authentication check: identity must come from a verified session, never from
+    // caller-controlled headers or cookie values.
+    const sessionCookie = request.cookies.get("fp_session")?.value;
+    const payload = sessionCookie ? await verifySession(sessionCookie) : null;
 
-    let userId: string | null = null;
-    let userName = "Coleccionista";
-
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.substring(7);
-      if (token && token.trim() !== "") {
-        userId = token.startsWith("usr_") ? token : `usr_${token.slice(0, 8)}`;
-      }
-    } else if (cookieToken) {
-      userId = cookieToken.startsWith("usr_") ? cookieToken : `usr_${cookieToken.slice(0, 8)}`;
-    } else if (process.env.NODE_ENV === "test" && headerUserId) {
-      userId = headerUserId;
-      if (headerUserName) userName = headerUserName;
-    }
+    const userId: string | null = payload?.id || null;
+    const userName = payload?.name || "Coleccionista";
 
     if (!userId) {
       return NextResponse.json(

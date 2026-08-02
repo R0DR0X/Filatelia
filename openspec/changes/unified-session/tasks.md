@@ -234,17 +234,42 @@ Required order:
    more than once. An operator with `wrangler`/D1 prod credentials must run
    it. Verify afterward with a read-only query that the admin `User` row has
    a `UserRole` row joined to `Role('admin')`.
-3. **Provision `ADMIN_API_TOKEN`** on both sides (see task 3.4 for the exact
+3. **Run migration `filatelia-web/db/migrations/0008_create_site_visit.sql`
+   against remote D1 — BEFORE this Worker build is deployed.** This Worker
+   build removes the `CREATE TABLE IF NOT EXISTS SiteVisit` that the old
+   `POST /analytics/visit` handler ran on every request, so from this deploy
+   onwards the endpoint assumes the table already exists. The migration is
+   idempotent (`CREATE TABLE IF NOT EXISTS`) and safe to run more than once.
+   Like 0007 it has NOT been executed by this agent, per the hard constraint
+   against touching prod D1.
+   - **Belief, UNVERIFIED against live D1**: production is expected to
+     *already* have `SiteVisit`, because the old handler created it on demand
+     on the first anonymous pageview. Nobody has confirmed this against the
+     real database — treat it as an assumption, not a fact, and check it.
+   - **Read-only check an operator can run** (no writes, no DDL):
+     `wrangler d1 execute filatelia-db --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name='SiteVisit';"`
+     — one row means the table exists; zero rows means it does not and the
+     migration is mandatory before step 5.
+   - **Symptom if this is wrong**: silent, total analytics loss. Every
+     `POST /analytics/visit` answers 500 with `no such table: SiteVisit`, and
+     `filatelia-web/src/components/AnalyticsTracker.tsx` swallows it with
+     `.catch(() => {})` — so there is NO user-facing error, no broken page,
+     and no client-side signal at all; visit counts simply stop growing. The
+     only evidence is the Worker log line
+     `analytics/visit: rejected — the SiteVisit table does not exist …`,
+     which this build emits for exactly this case. Check Worker logs after
+     deploy if the count on the site stops moving.
+4. **Provision `ADMIN_API_TOKEN`** on both sides (see task 3.4 for the exact
    steps): `wrangler secret put ADMIN_API_TOKEN` on the Worker, and the same
    value as an encrypted Pages environment variable for `filatelia-web`.
    Verify with a manual authenticated request to a Worker `/admin/*` route
    bearing `X-Admin-Token` BEFORE deploying this PR's `requireAdmin` change.
-4. **Only once 1–3 are verified, deploy this PR's Worker build**
+5. **Only once 1–4 are verified, deploy this PR's Worker build**
    (`requireAdmin` token-only, `/auth/*` gone, `JWT_SECRET` gone).
-5. **Post-deploy smoke test**: log in as the admin user through the Next app
+6. **Post-deploy smoke test**: log in as the admin user through the Next app
    UI, confirm `/admin` loads and at least one admin action (e.g. `GET
    /admin/stamps` through the proxy) succeeds.
-6. **Rotate/remove `JWT_SECRET` from the deployed Worker.** It was committed
+7. **Rotate/remove `JWT_SECRET` from the deployed Worker.** It was committed
    in plaintext in `wrangler.toml` (value
    `fp-secret-2024-filatelia-peruana-secure`) for the lifetime of this
    repository and MUST be treated as compromised — anyone with repo access
@@ -258,7 +283,7 @@ Required order:
    required operator action, not something this agent can perform (no
    `wrangler`/deploy access).
 
-### Recovery if deployed out of order (steps 2–3 skipped before step 4)
+### Recovery if deployed out of order (steps 2–4 skipped before step 5)
 
 Symptom: the Worker's `/admin/*` routes reject everything without a matching
 `X-Admin-Token`, and there is no cookie fallback to recover through, so
@@ -272,7 +297,7 @@ closes:
   secret store. Redeploying the old build therefore redeploys
   `JWT_SECRET = "fp-secret-2024-filatelia-peruana-secure"` as a plaintext
   `[vars]` entry, restoring a secret that has been readable by anyone with
-  repository access for the lifetime of this repo (see step 6).
+  repository access for the lifetime of this repo (see step 7).
 - That old build also restores the legacy `fp_session` cookie path that
   *trusts* that secret, plus the two privilege-escalation rules it carried
   (`@filateliaperuana.com` email suffix ⇒ admin, and "if `User` has exactly
@@ -316,12 +341,12 @@ everything this needs. In order:
 5. **Verify the grant read-only**: confirm the admin `User` row now has a
    `UserRole` row joined to `Role('admin')`.
 6. **Re-log-in through the Next app UI** so a fresh session cookie is issued
-   carrying the new role claim, then re-run step 5 of the deploy order
+   carrying the new role claim, then re-run step 6 of the deploy order
    (`/admin` loads, one admin action succeeds).
 
 Steps 1–3 alone restore the Worker hop; steps 4–6 restore the operator's own
 admin session. Neither touches `JWT_SECRET`, and neither requires reopening
-the legacy cookie path. Whatever the recovery route, step 6 of the deploy
+the legacy cookie path. Whatever the recovery route, step 7 of the deploy
 order (rotate/remove `JWT_SECRET` from every deployed Worker version) remains
 mandatory and is not satisfied by any of the above.
 

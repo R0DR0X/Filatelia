@@ -11,6 +11,9 @@
  */
 
 import fs from 'fs';
+import { requireAdminToken, adminTokenHeader } from './lib/admin-token.mjs';
+
+const ADMIN_TOKEN = requireAdminToken();
 
 const API_URL        = process.env.FILATELIA_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev';
 const WIKIMEDIA_API  = 'https://commons.wikimedia.org/w/api.php';
@@ -86,7 +89,7 @@ async function getImageInfo(fileName) {
 async function uploadToR2(key, imageUrl, bucket = 'images') {
   const res = await fetch(`${API_URL}/upload-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...adminTokenHeader(ADMIN_TOKEN) },
     body: JSON.stringify({ key, url: imageUrl, bucket }),
   });
   if (!res.ok) throw new Error(`upload-image ${res.status}: ${await res.text()}`);

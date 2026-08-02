@@ -712,8 +712,42 @@ app.post('/query', async (c) => {
 // 7. ENDPOINT: upload-image (R2 Image Storage)
 // Accepts { key, url, bucket? } — fetches image from URL, stores in R2
 // ==========================================
-app.post('/upload-image', async (c) => {
+//
+// The `url` path makes the Worker itself perform a server-side fetch of a
+// caller-supplied address and store the result in a publicly-served R2
+// bucket (`GET /r2/:bucket/:key`). Even behind admin auth this is a
+// request-forgery primitive, so the target host is restricted to an
+// explicit allowlist derived from the actual callers of this endpoint: the
+// only real-world `url` producer is `scrapers/fetch-wikimedia.mjs`, which
+// queries `commons.wikimedia.org` (WIKIMEDIA_API) and stores whatever image
+// URL the MediaWiki `imageinfo` API returns for `url`/`thumburl` — which
+// MediaWiki always serves from `upload.wikimedia.org`, never from
+// `commons.wikimedia.org` itself. Both hosts are listed here so the
+// allowlist matches actual, observed usage rather than a broad guess.
+//
+// The allowlist is enforced twice: on the caller-supplied URL before any
+// network call, and on the response that actually produced the stored bytes
+// (redirects are refused, see `uploadImageHandler`).
+export const WIKIMEDIA_UPLOAD_ALLOWLIST = ['commons.wikimedia.org', 'upload.wikimedia.org'] as const;
+
+// Exact match or a strict subdomain of an allowlisted host — never a
+// substring/`includes()`/`endsWith()` check, which would also accept
+// `evil-wikimedia.org` (substring match) or `wikimedia.org.attacker.com`
+// (suffix match on the raw string). Comparing against `URL.hostname`
+// (post-parse, lowercased, punycode-normalized by the URL parser) and
+// requiring either an exact match or a `.`-bounded suffix closes both.
+function isAllowedUploadHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return WIKIMEDIA_UPLOAD_ALLOWLIST.some(
+    (allowed) => host === allowed || host.endsWith(`.${allowed}`)
+  );
+}
+
+async function uploadImageHandler(c: any) {
   try {
+    const admin = await requireAdmin(c);
+    if (!admin) return c.json({ success: false, error: 'Forbidden' }, 403);
+
     // Accepts: { key, bucket?, url? } OR { key, bucket?, data: "base64...", contentType? }
     const body = await c.req.json();
     const { key, bucket = 'images', url, data, contentType: ctOverride } = body;
@@ -737,10 +771,68 @@ app.post('/upload-image', async (c) => {
       imageBytes = new Uint8Array([...binary].map(c => c.charCodeAt(0))).buffer;
       contentType = ctOverride || 'image/jpeg';
     } else {
-      // URL path: Worker fetches directly (works for open URLs like Wikimedia)
-      const imgRes = await fetch(url, {
-        headers: { 'User-Agent': 'FilateliaBot/1.0 (https://filatelia.pe)' }
+      // URL path: Worker fetches directly. Validate the PARSED URL's
+      // protocol and hostname against the allowlist BEFORE any fetch is
+      // attempted — an invalid URL must never reach the network.
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return c.json({ success: false, error: 'Invalid url' }, 400);
+      }
+      if (parsed.protocol !== 'https:') {
+        return c.json({ success: false, error: 'url must use https' }, 400);
+      }
+      if (!isAllowedUploadHost(parsed.hostname)) {
+        return c.json({ success: false, error: `url host '${parsed.hostname}' is not allowlisted` }, 400);
+      }
+
+      // `redirect: 'manual'` is REQUIRED, not cosmetic. The Fetch default is
+      // `redirect: 'follow'`, and Workers follows 3xx across hosts
+      // transparently, so the host that actually serves the bytes would never
+      // be re-checked: an allowlisted host issuing a redirect (an open
+      // redirect, or a compromised/hostile response) would send this Worker
+      // anywhere and the result would land in a PUBLIC R2 bucket, defeating
+      // the allowlist entirely.
+      //
+      // Rejecting redirects outright — rather than following them hop by hop
+      // with re-validation — is chosen because it costs the real use case
+      // nothing: the only `url` producer is `scrapers/fetch-wikimedia.mjs`,
+      // which passes the MediaWiki `imageinfo` `url`/`thumburl` values
+      // verbatim. Those are already-resolved direct file URLs on
+      // `upload.wikimedia.org` and are served 200 with the bytes; they are not
+      // redirect entry points. So there is no hop to follow, and the simpler,
+      // strictly safer option loses no functionality.
+      const imgRes = await fetch(parsed.toString(), {
+        headers: { 'User-Agent': 'FilateliaBot/1.0 (https://filatelia.pe)' },
+        redirect: 'manual',
       });
+      if (imgRes.status >= 300 && imgRes.status < 400) {
+        return c.json({
+          success: false,
+          error: `url responded with a redirect (${imgRes.status}); redirects are not followed`,
+        }, 400);
+      }
+      // Defence in depth: enforce the allowlist at the point of STORAGE, not
+      // only at the point of request. If any future change (or a runtime that
+      // ignores `redirect: 'manual'`) lets the fetch land elsewhere,
+      // `imgRes.url` exposes the final host and it must still be allowlisted.
+      // Constructed/mocked responses report an empty `url`; only re-check when
+      // the runtime actually reported one.
+      if (imgRes.url) {
+        let finalParsed: URL | null = null;
+        try {
+          finalParsed = new URL(imgRes.url);
+        } catch {
+          finalParsed = null;
+        }
+        if (!finalParsed || finalParsed.protocol !== 'https:' || !isAllowedUploadHost(finalParsed.hostname)) {
+          return c.json({
+            success: false,
+            error: `response came from a non-allowlisted host '${finalParsed?.hostname ?? imgRes.url}'`,
+          }, 400);
+        }
+      }
       if (!imgRes.ok) throw new Error(`Fetch failed: ${imgRes.status} ${url}`);
       contentType = ctOverride || imgRes.headers.get('content-type') || 'image/jpeg';
       // Reject HTML responses (means URL requires auth)
@@ -755,7 +847,10 @@ app.post('/upload-image', async (c) => {
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
-});
+}
+
+app.post('/upload-image', uploadImageHandler);
+app.post('/admin/upload-image', uploadImageHandler);
 
 // ==========================================
 // 8. ENDPOINT: r2/:bucket/:key (Serve images from R2)
@@ -1161,22 +1256,78 @@ app.post('/admin/seed-countries', async (c) => {
 // ANALYTICS ENDPOINTS
 // ==========================================
 
+// `path`/`referrer` are caller-supplied on an intentionally unauthenticated
+// endpoint (see below), so they must never be stored unbounded. Truncating
+// rather than rejecting keeps every real pageview recorded even when a
+// referrer or SPA route happens to be unusually long; 512 bytes comfortably
+// covers any real URL path or referrer this site produces while still
+// bounding worst-case row size against an abusive caller.
+//
+// This bound is measured in UTF-8 BYTES — the unit D1/SQLite actually stores
+// — not in JavaScript string length. `String.prototype.slice` counts UTF-16
+// code units, which would neither bound the row (512 code units of CJK or
+// Cyrillic text is up to ~1536 bytes) nor be safe (a cut landing between a
+// surrogate pair yields a lone surrogate that SQLite may store as U+FFFD or
+// as malformed bytes).
+export const ANALYTICS_FIELD_MAX_LENGTH = 512;
+
+export function truncateAnalyticsField(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (value === undefined) return undefined;
+  const str = String(value);
+
+  const encoded = new TextEncoder().encode(str);
+  if (encoded.byteLength <= ANALYTICS_FIELD_MAX_LENGTH) return str;
+
+  // Walk the cut point back off any UTF-8 continuation byte (`10xxxxxx`) so it
+  // always lands on a code-point boundary. `TextEncoder` never emits lone
+  // surrogates, so a whole-sequence cut plus `TextDecoder` is guaranteed to
+  // produce a well-formed string with no replacement characters introduced.
+  let end = ANALYTICS_FIELD_MAX_LENGTH;
+  while (end > 0 && (encoded[end] & 0b1100_0000) === 0b1000_0000) end--;
+  return new TextDecoder().decode(encoded.subarray(0, end));
+}
+
+// PUBLIC BY DESIGN: this endpoint's only consumer is
+// `filatelia-web/src/components/AnalyticsTracker.tsx`, which fires for
+// every anonymous visitor, so it intentionally carries no `requireAdmin`
+// check. It therefore remains an unauthenticated, unrate-limited write path
+// into production D1 — a known, accepted risk. Rate limiting would need KV
+// or a Durable Object and is a separate design decision, deliberately out
+// of scope here; the mitigations applied are (a) removing the per-request
+// DDL below (the `SiteVisit` table now ships via
+// `filatelia-web/db/migrations/0008_create_site_visit.sql`) and (b)
+// bounding `path`/`referrer` length so a caller cannot write unbounded
+// strings into the row.
 app.post('/analytics/visit', async (c) => {
   try {
     const { path, referrer } = await c.req.json();
 
-    // Ensure table exists
-    await c.env.DB.prepare(
-      `CREATE TABLE IF NOT EXISTS SiteVisit (id TEXT PRIMARY KEY, path TEXT, referrer TEXT, createdAt TEXT DEFAULT (datetime('now')))`
-    ).run();
-
     const id = crypto.randomUUID();
     await c.env.DB.prepare(
       `INSERT INTO SiteVisit (id, path, referrer, createdAt) VALUES (?, ?, ?, datetime('now'))`
-    ).bind(id, path || '/', referrer || null).run();
+    ).bind(id, truncateAnalyticsField(path) || '/', truncateAnalyticsField(referrer) || null).run();
 
     return c.json({ success: true });
   } catch (err: any) {
+    // The removed per-request DDL used to make this endpoint self-healing: if
+    // `SiteVisit` was missing anywhere, the next request created it. It no
+    // longer does, and the only client (`AnalyticsTracker.tsx`) swallows the
+    // failure with `.catch(() => {})` — so a missing table means 100% silent
+    // analytics loss with no user-facing symptom at all. Log it server-side,
+    // distinctly enough that an operator reads "run migration 0008" and not
+    // "generic insert error". The client-visible response is unchanged.
+    const message = err?.message ?? String(err);
+    if (/no such table/i.test(message)) {
+      console.error(
+        'analytics/visit: rejected — the SiteVisit table does not exist in this D1 database. ' +
+        'Migration filatelia-web/db/migrations/0008_create_site_visit.sql has not been applied to this environment; ' +
+        'EVERY anonymous visit is being dropped and the client swallows the error silently. ' +
+        `D1 said: ${message}`
+      );
+    } else {
+      console.error('analytics/visit: rejected — INSERT into SiteVisit failed:', message);
+    }
     return c.json({ success: false, error: err.message }, 500);
   }
 });

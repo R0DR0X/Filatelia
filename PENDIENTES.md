@@ -12,37 +12,59 @@ E0 (seguridad) ─┬─> E1 (auth) ──> E4 (cuenta) ──> E5 (valoración)
 
 ---
 
-## E0 — Cerrar vulnerabilidades 🔴 BLOQUEANTE
+## E0 — Cerrar vulnerabilidades ✅ CERRADO (desplegado 2026-08-02)
 
-> El endpoint `/query` ejecuta SQL arbitrario contra la D1 de producción sin autenticación.
-> Verificado en vivo. Nada de lo demás debe construirse antes de cerrar esto.
+- [x] **E0.1** Test: `POST /query` con `sql` y sin credenciales devuelve 401
+- [x] **E0.2** La rama SQL se **eliminó** en vez de esconderla tras un secreto: un gateway de SQL con contraseña sigue siendo un gateway de SQL
+- [x] **E0.3** El caller usa el binding D1 directo — `filatelia-web/src/lib/db/collection.ts`
+- [x] **E0.4** Test: token inválido o Supabase caído ⇒ 401, nunca `demo-user-id`
+- [x] **E0.5** Fallbacks a `demo-user-id` eliminados
+- [~] **E0.6** `JWT_SECRET` ya no existe en el Worker desplegado. **`APP_SECRET` no se ha rotado** y sigue pendiente; ambos están en el historial de git, así que hay que darlos por filtrados
+- [x] **E0.7** Auditoría forense de la D1: sin rastro de manipulación, coincide con el baseline
 
-- [ ] **E0.1** Test: `POST /query` con `sql` y sin credenciales devuelve 401 — `workers/filatelia-api/test/`
-- [ ] **E0.2** Exigir secreto de servicio en la rama SQL, o eliminarla y exponer endpoints tipados — `workers/filatelia-api/src/index.ts:543`
-- [ ] **E0.3** Migrar el caller al endpoint tipado o al binding D1 directo — `filatelia-web/src/lib/db/collection.ts:17`
-- [ ] **E0.4** Test: token inválido o Supabase caído ⇒ 401, nunca `demo-user-id`
-- [ ] **E0.5** Quitar los dos fallbacks a `demo-user-id` — `workers/filatelia-api/src/index.ts:37-57`
-- [ ] **E0.6** Rotar `JWT_SECRET` y `APP_SECRET` (tenían default hardcodeado en el código)
-- [ ] **E0.7** Auditar la D1 en busca de escrituras anómalas antes de cerrar el hueco
+### Cerrado además, no estaba en el plan
 
-## E1 — Una sola sesión 🔴 BLOQUEANTE
+Aparecieron auditando, todas verificadas en vivo antes y después:
 
-> Hoy el registro por email crea el usuario en el Worker pero **no autentica en la app Next**:
-> cookies en dominios distintos, secretos distintos, payloads distintos. Solo funciona Google OAuth.
+- [x] `POST /import-stamp` **no tenía ninguna autenticación** — cualquiera escribía en la tabla `Stamp` de producción. El README lo llamaba "el endpoint seguro"
+- [x] `POST /upload-image` sin auth: escritura arbitraria en un bucket R2 público **y** SSRF (el Worker traía la URL que le pasaras)
+- [x] `POST /admin/seed-countries` sin auth pese al prefijo `/admin/`
+- [x] `requireAdmin` daba admin a cualquier correo `@filateliaperuana.com` y a cualquier usuario si la tabla `User` tenía una sola fila
+- [x] El proxy admin dejaba que `..` escapara del prefijo `/admin/`
+- [x] `/analytics/visit` ejecutaba `CREATE TABLE` en cada visita e insertaba texto sin límite. Ahora 60 req/min por IP
+- [x] `/api/bids` construía la identidad desde datos sin verificar
 
-- [ ] **E1.1** Decidir dónde vive la sesión (recomendado: la app Next, ya tiene middleware y cookie httpOnly)
-- [ ] **E1.2** Test: registro por email ⇒ cookie `fp_session` válida ⇒ `/perfil` accesible
-- [ ] **E1.3** Implementar `POST /api/auth/register` en Next con verificación real de contraseña
-- [ ] **E1.4** Reimplementar `POST /api/auth/login` con comparación timing-safe — `src/app/api/auth/login/route.ts` (hoy devuelve 501 a propósito)
-- [ ] **E1.5** Reapuntar `src/lib/auth.ts:12,33` del Worker a las rutas Next
-- [ ] **E1.6** Eliminar `localStorage` como almacén de sesión — `src/lib/auth.ts:20-22,41-42`
-- [ ] **E1.7** Unificar el payload: el Worker emite `sub`, Next lee `id`
-- [ ] **E1.8** Verificar que Google OAuth sigue funcionando tras el cambio
+## E1 — Una sola sesión ✅ CERRADO (desplegado 2026-08-02)
 
-## E2 — Fase de detalle del scraper
+> La app Next es la única autoridad de sesión: cookie `fp_session` httpOnly, HMAC con
+> `APP_SECRET`, respaldada por D1. El Worker perdió sus rutas `/auth/*` y su JWT.
+> El navegador no guarda ninguna credencial.
+
+- [x] **E1.1** La sesión vive en la app Next
+- [x] **E1.2** Test: registro por email ⇒ cookie válida ⇒ `/perfil` accesible
+- [x] **E1.3** `POST /api/auth/register` con PBKDF2 real
+- [x] **E1.4** `POST /api/auth/login` con comparación timing-safe
+- [x] **E1.5** `src/lib/auth.ts` apunta a las rutas Next
+- [x] **E1.6** `localStorage` eliminado como almacén de sesión
+- [x] **E1.7** Payload unificado en `id`
+- [x] **E1.8** Google OAuth verificado, y de paso cerrado un pre-hijacking de cuenta
+
+Extras: sesión deslizante de 30 días con techo absoluto de 90; el rol de admin se
+resuelve en D1 en cada petición en vez de confiar en la sesión, así que revocar
+un admin surte efecto en la siguiente petición y no a los 30 días.
+
+**Falta una sola cosa de E0+E1**: entrar a `/admin` desde un navegador con sesión real y
+confirmar el flujo de punta a punta. Todas las capas están verificadas por separado.
+Artefactos archivados en `openspec/changes/archive/2026-08-02-unified-session/`.
+
+## E2 — Fase de detalle del scraper ⏸️ BLOQUEADO POR ANCHO DE BANDA
 
 > Está escrita en `parse_detail_page` pero **nunca se ejecutó**. Hay 14,396 sellos en cola,
 > todos `pending`. Por eso las fichas de Colnect salen vacías.
+>
+> **2026-08-02**: parado por falta de GB en el proxy, no por código. La VM peruana tampoco
+> tiene el repo clonado todavía (sí tiene ya `ADMIN_API_TOKEN` en el entorno, que los
+> scrapers ahora exigen para arrancar).
 
 - [ ] **E2.1** Provisionar la VM peruana `100.75.97.61`: venv, pip, playwright, chromium (shell es `fish` → usar `bash -lc`)
 - [ ] **E2.2** Desplegar scraper y cookies de Colnect en la VM

@@ -21,6 +21,9 @@
  */
 
 import fs from 'fs';
+import { requireAdminToken, adminTokenHeader } from './lib/admin-token.mjs';
+
+const ADMIN_TOKEN = requireAdminToken();
 
 const API_URL = process.env.FILATELIA_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev';
 const BATCH_SIZE = 20;
@@ -126,7 +129,7 @@ function saveCheckpoint(cp) {
 async function sendBatch(stamps) {
   const res = await fetch(`${API_URL}/import-stamp`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...adminTokenHeader(ADMIN_TOKEN) },
     body: JSON.stringify({ stamps }),
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);

@@ -6,7 +6,7 @@ Este documento detalla el diseño, la arquitectura y los procedimientos para la 
 
 ## 📐 1. Arquitectura del Pipeline de Datos
 
-El pipeline se ejecuta localmente (en tu máquina o VPS) para evadir bloqueos de IPs y limites de recursos, conectándose directamente con la base de datos de producción **Cloudflare D1** usando el endpoint seguro `/import-stamp` del API Worker.
+El pipeline se ejecuta localmente (en tu máquina o VPS) para evadir bloqueos de IPs y limites de recursos, conectándose directamente con la base de datos de producción **Cloudflare D1** usando el endpoint `/import-stamp` del API Worker, protegido con un token de administrador (ver sección 3).
 
 ```mermaid
 flowchart TD
@@ -55,6 +55,35 @@ Los archivos de scraping están ubicados en la carpeta `scrapers/` de tu proyect
   1. Si un sello con el mismo código `wnsNumber` ya existe, actualiza los campos vacíos de forma inteligente sin sobrescribir datos verificados.
   2. Crea de forma dinámica los catálogos (`Catalog`) y grupos de sellos (`StampGroup`) si no existían previamente en la base de datos SQLite.
   3. Relaciona los sellos con su respectivo país de origen y temática.
+
+### 🔐 Autenticación requerida (`ADMIN_API_TOKEN`)
+
+`POST /import-stamp` está protegido por `requireAdmin`: toda petición debe
+enviar la cabecera `X-Admin-Token` con el mismo valor que el secreto
+`ADMIN_API_TOKEN` del Worker, o el Worker responde `403 Forbidden` sin
+tocar D1. Antes de este cambio el endpoint no requería credenciales — cualquiera
+en internet podía insertar o sobrescribir filas de `Stamp` en producción; eso
+ya no es el caso.
+
+Los tres scrapers (`01-wikidata-scraper.mjs`, `02-wns-scraper.mjs`,
+`03-colnect-scraper.mjs`) leen `ADMIN_API_TOKEN` de la variable de entorno del
+mismo nombre y la envían automáticamente en cada llamada a `/import-stamp`.
+Si la variable no está definida, el scraper falla inmediatamente al arrancar
+(antes de iniciar cualquier crawl) con un mensaje explicando cómo definirla,
+en vez de correr horas y descubrir al final que cada escritura fue rechazada
+con 403.
+
+Para correr un scraper local o en un VPS:
+
+```bash
+export ADMIN_API_TOKEN="<mismo valor que el secreto ADMIN_API_TOKEN del Worker>"
+node scrapers/01-wikidata-scraper.mjs --limit 500
+```
+
+El valor debe coincidir con el secreto `ADMIN_API_TOKEN` provisionado en el
+Worker (`wrangler secret put ADMIN_API_TOKEN`, ver
+`openspec/changes/unified-session/tasks.md`, tarea 3.4). No lo definas en
+`wrangler.toml` ni lo comitees al repositorio.
 
 ---
 

@@ -815,8 +815,15 @@ function validateCountryPayload(
   return { id: derivedId, code, nameEs, nameEn };
 }
 
-app.post('/import-stamp', async (c) => {
+// Extracted so `/import-stamp` (used by the scrapers) and `/admin/import-stamp`
+// (reachable through the Next admin proxy, which only forwards to Worker
+// `/admin/<path>`) can never drift: both routes register the exact same
+// handler below instead of copy-pasted bodies.
+async function importStampHandler(c: any) {
   try {
+    const admin = await requireAdmin(c);
+    if (!admin) return c.json({ success: false, error: 'Forbidden' }, 403);
+
     const body = await c.req.json();
     const stamps: any[] = Array.isArray(body) ? body : body.stamps || [body];
 
@@ -1034,7 +1041,10 @@ app.post('/import-stamp', async (c) => {
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
-});
+}
+
+app.post('/import-stamp', importStampHandler);
+app.post('/admin/import-stamp', importStampHandler);
 
 // ==========================================
 // AUTH HELPERS
@@ -1352,20 +1362,16 @@ app.get('/analytics/total', async (c) => {
   }
 });
 
-app.get('/analytics/stats', async (c) => {
+// Extracted so `/analytics/stats` and `/admin/analytics/stats` (reachable
+// through the Next admin proxy) register the exact same handler instead of
+// copy-pasted bodies. Previously this hand-rolled its own inline admin
+// check (`getAuthUser` + role/email/first-user logic duplicated from
+// `requireAdmin`); it now defers to `requireAdmin` so there is one admin
+// authority in this file.
+async function analyticsStatsHandler(c: any) {
   try {
-    const authUser = await getAuthUser(c);
-    if (!authUser) return c.json({ success: false, error: 'Unauthorized' }, 401);
-
-    // Check admin role
-    const isAdmin = authUser.role === 'admin' || authUser.email?.endsWith('@filateliaperuana.com');
-    if (!isAdmin) {
-      // Also allow if only 1 user in DB
-      const userCount = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM User').first() as any;
-      if (!userCount || userCount.cnt > 1) {
-        return c.json({ success: false, error: 'Forbidden' }, 403);
-      }
-    }
+    const admin = await requireAdmin(c);
+    if (!admin) return c.json({ success: false, error: 'Forbidden' }, 403);
 
     const stampCount = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM Stamp').first() as any;
 
@@ -1395,7 +1401,10 @@ app.get('/analytics/stats', async (c) => {
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
-});
+}
+
+app.get('/analytics/stats', analyticsStatsHandler);
+app.get('/admin/analytics/stats', analyticsStatsHandler);
 
 // ==========================================
 // ADMIN CRUD: stamps

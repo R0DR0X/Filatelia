@@ -11,6 +11,9 @@
  */
 
 import fs from 'fs';
+import { requireAdminToken, adminTokenHeader } from './lib/admin-token.mjs';
+
+const ADMIN_TOKEN = requireAdminToken();
 
 const API_URL  = process.env.FILATELIA_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev';
 const WNS_BASE = 'https://www.wnsstamps.post';
@@ -153,7 +156,7 @@ function mapStamp(s, memberName) {
 async function sendBatch(stamps) {
   const res = await fetch(`${API_URL}/import-stamp`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...adminTokenHeader(ADMIN_TOKEN) },
     body: JSON.stringify({ stamps }),
   });
   if (!res.ok) throw new Error(`import-stamp ${res.status}: ${await res.text()}`);

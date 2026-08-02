@@ -30,6 +30,9 @@ const LIMIT_FILTER = args.limit ? parseInt(args.limit) : null;
 
 import fs from 'fs';
 import path from 'path';
+import { requireAdminToken, adminTokenHeader } from './lib/admin-token.mjs';
+
+const ADMIN_TOKEN = requireAdminToken();
 
 // Mapa ISO de países (Wikidata label → ISO code)
 const COUNTRY_MAP = {
@@ -110,7 +113,7 @@ async function querySparql(offset) {
 async function sendBatch(stamps) {
   const res = await fetch(`${API_URL}/import-stamp`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...adminTokenHeader(ADMIN_TOKEN) },
     body: JSON.stringify({ stamps }),
   });
   if (!res.ok) throw new Error(`API error: ${res.status} ${await res.text()}`);

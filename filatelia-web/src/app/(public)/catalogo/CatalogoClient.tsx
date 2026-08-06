@@ -54,6 +54,7 @@ function Flag({ code }: { code: string }) {
 
 // ─── Stamp mini card inside a group ──────────────────────────────────────────
 import { QuickAddButtons } from "@/components/collection/QuickAddButtons";
+import { CollectionIndexProvider } from "@/components/collection/CollectionIndexProvider";
 
 function GroupStampCard({ stamp }: { stamp: StampInGroup }) {
   const [imgError, setImgError] = useState(false);
@@ -247,6 +248,11 @@ export default function CatalogoClient() {
   );
 
   return (
+    // One collection read for the whole page. Every GroupStampCard below asks
+    // this provider for its own row instead of fetching `/api/collection`
+    // itself — a country can render hundreds of cards, and the endpoint
+    // returns the full list every time with no per-stamp filter.
+    <CollectionIndexProvider>
     <div className="min-h-screen bg-black">
       {/* ── Hero ── */}
       <section className="relative border-b border-white/10 py-16 overflow-hidden">
@@ -351,5 +357,6 @@ export default function CatalogoClient() {
         </AnimatePresence>
       </div>
     </div>
+    </CollectionIndexProvider>
   );
 }

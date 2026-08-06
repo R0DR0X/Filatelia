@@ -47,14 +47,9 @@ export function quickAddSpec(listType: QuickAddListType, isActive: boolean): Qui
   };
 }
 
-/**
- * Toggling a membership on or off, as a set operation.
- *
- * Extracted so the optimistic update is verifiable: the component used to do
- * this inline, and an off-by-one in it silently shows the wrong list as owned.
- */
-export function toggleMembership(lists: QuickAddListType[], listType: QuickAddListType): QuickAddListType[] {
-  return lists.includes(listType)
-    ? lists.filter((l) => l !== listType)
-    : [...lists, listType];
-}
+// There is deliberately no `toggleMembership` set helper here. An earlier
+// version had one, because the card treated the three lists as independent
+// tags. It does not: a stamp is in at most ONE list, the same model the
+// detail page enforces, and the transition is owned by `planCollectionAction`
+// in collectionControl.ts. A tested helper implementing the multi-select
+// model would be a standing invitation to go back to it.

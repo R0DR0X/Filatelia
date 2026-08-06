@@ -1,11 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import {
-  QUICK_ADD_ORDER,
-  quickAddSpec,
-  toggleMembership,
-  type QuickAddListType,
-} from "../src/lib/quickAdd";
+import { QUICK_ADD_ORDER, quickAddSpec } from "../src/lib/quickAdd";
 
 test("there are exactly three quick-add lists, in a stable order", () => {
   // The card renders these into a fixed 3-column grid. A fourth entry would
@@ -63,24 +58,4 @@ test("the short label never changes with state", () => {
       `${listType}'s visible text must not change width on toggle`,
     );
   }
-});
-
-test("toggling adds a list that is not there", () => {
-  assert.deepStrictEqual(toggleMembership([], "collection"), ["collection"]);
-});
-
-test("toggling removes a list that is there", () => {
-  assert.deepStrictEqual(toggleMembership(["collection", "trade"], "collection"), ["trade"]);
-});
-
-test("toggling one list never disturbs the others", () => {
-  const before: QuickAddListType[] = ["wishlist", "trade"];
-  assert.deepStrictEqual(toggleMembership(before, "collection"), ["wishlist", "trade", "collection"]);
-  assert.deepStrictEqual(before, ["wishlist", "trade"], "the input must not be mutated");
-});
-
-test("toggling twice returns to the starting set", () => {
-  const start: QuickAddListType[] = ["wishlist"];
-  const round = toggleMembership(toggleMembership(start, "collection"), "collection");
-  assert.deepStrictEqual([...round].sort(), [...start].sort());
 });

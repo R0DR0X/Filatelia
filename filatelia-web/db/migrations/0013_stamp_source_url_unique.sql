@@ -1,0 +1,44 @@
+-- D1 Migration v13: give Stamp.sourceUrl the UNIQUE index that
+-- `POST /import-stamp` has been assuming since it was written.
+--
+-- THE BUG (PENDIENTES.md E2.6, "el ultimo lote persistio 0 de 3").
+-- importStampHandler has two branches. The WNS branch upserts with
+-- ON CONFLICT(wnsNumber), and `wnsNumber TEXT UNIQUE` is declared on the
+-- table, so that branch works. Every other source — which means every Colnect
+-- stamp, since Colnect rows carry no WNS number — takes the second branch and
+-- upserts with ON CONFLICT(sourceUrl). No UNIQUE index on `sourceUrl` has ever
+-- existed.
+--
+-- SQLite does not treat that as a runtime miss that degrades to a plain
+-- INSERT. It rejects the statement while parsing it:
+--
+--     ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint
+--
+-- The handler catches per stamp, so the batch does not crash — it reports
+-- every stamp as failed and persists nothing. A batch of 3 persists 0 of 3.
+-- Reproduced against the declared schema in test/stamp-detail-schema.test.mjs.
+--
+-- IF THIS MIGRATION FAILS, IT IS TELLING YOU SOMETHING. Creating a UNIQUE
+-- index over a column that already holds duplicates fails, and that is the
+-- correct outcome: it means production has rows the importer would have been
+-- silently collapsing into one. scripts/ops/e3-rollout.sh runs the duplicate
+-- count FIRST and refuses to apply this file until it reads zero, so the
+-- failure surfaces as a readable number instead of an opaque index error.
+-- Do not "fix" a failure here by deleting rows without looking at them.
+--
+-- WHY THIS IS A FULL INDEX AND NOT A PARTIAL ONE. The obvious-looking
+-- `... WHERE sourceUrl IS NOT NULL` states the intent more precisely, and it
+-- does not work. SQLite will only accept a partial index as an ON CONFLICT
+-- target if the conflict clause repeats the index predicate verbatim
+-- (`ON CONFLICT(sourceUrl) WHERE sourceUrl IS NOT NULL`), which the Worker
+-- does not write — so a partial index reproduces the exact parse error this
+-- migration exists to remove. The full index is the one that fixes the bug.
+--
+-- The rows with no source URL are safe regardless: SQLite treats NULLs as
+-- distinct in a UNIQUE index, so the 1,940 excel-import and 66 wikidata rows
+-- that have no source URL all continue to coexist. That behaviour is pinned by
+-- a test in test/stamp-detail-schema.test.mjs rather than left as folklore.
+--
+-- NOT EXECUTED BY THIS CHANGE. Committed as a reviewable artifact only.
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stamp_source_url ON Stamp(sourceUrl);

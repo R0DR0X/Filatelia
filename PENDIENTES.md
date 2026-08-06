@@ -251,6 +251,46 @@ Y un hallazgo aparte, que importa más que los tres:
 
 ---
 
+## Deuda de la web, fuera de los scrapers
+
+Auditada el 2026-08-06 contra el código y contra producción. El plan de
+ejecución paso a paso está en
+[`docs/superpowers/plans/2026-08-06-filatelia-cierre.md`](docs/superpowers/plans/2026-08-06-filatelia-cierre.md).
+
+- [ ] **W1. `/api/auctions/settle` acepta secretos hardcodeados.** `SETTLEMENT_KEY`
+  y `ADMIN_TOKEN` caen a los literales `"filatelia_settlement_secret_2026"` y
+  `"admin"`, y **ninguna de las dos variables está configurada en Pages**, así que
+  los literales están activos y están en git. Además `settleExpiredAuctions` solo
+  valida `if (header && ...)`: sin cabecera, no valida nada. **Es lo más urgente.**
+- [ ] **W2. Credenciales filtradas en el repo.** `web/tienda filatelica.txt`,
+  rastreado desde `223a457`: base MySQL y **admin de WordPress** de la tienda vieja.
+  Borrar el archivo no alcanza — hay que rotar, o dar de baja esa instalación.
+- [ ] **W3. Las subastas son un array en memoria.** `src/lib/db/auctions.ts:109`.
+  Producción sirve una subasta inventada (`auc-01`) a todo el mundo. En Cloudflare
+  cada isolate tiene su propia copia: dos usuarios ven pujas distintas y toda puja
+  desaparece al reciclarse el isolate. La lógica de pujas y el control de
+  concurrencia **están bien escritos**; solo operan sobre memoria. Las tablas
+  existen como migraciones huérfanas en dos carpetas distintas y nunca se aplicaron.
+- [ ] **W4. Las imágenes no son nuestras.** Los `imageUrl` apuntan a
+  `wnsstamps.post` y Colnect. Los buckets R2 existen y `/r2/:bucket/:key` ya sirve,
+  pero el catálogo nunca los usa. Es lo único de esta lista que puede romperse
+  **solo**, sin que nadie toque nada, y deja los 147,555 sellos en blanco.
+- [ ] **W5. Vectorize sin verificar.** `/identificar` y el código del Worker son
+  reales, pero los embeddings quizá nunca se generaron. Un índice vacío responde
+  igual que "no hay coincidencias". Verificar antes de prometer nada.
+
+## No existe documento de requerimientos de producto
+
+Buscado en todo el repositorio el 2026-08-06. `web/estructura.txt` son siete líneas
+de campos de WooCommerce; `web/tienda filatelica.txt` son credenciales; los `PLAN*.md`
+son hojas de ruta de infraestructura. **No hay nada que recoja qué necesita un
+coleccionista, ni de Marcos ni de la comunidad filatélica.**
+
+Eso explica por qué E7 quedó diferido con la nota "no sé cómo les gusta a los
+filatélicos". Si esos requerimientos existen, están fuera del repo. Conseguirlos vale
+más que otro mes de scraping: se pueden cargar 500,000 sellos y seguir sin saber si
+lo que hace falta son lotes, intercambio entre usuarios, o listas de faltantes.
+
 ## Decisiones pendientes (bloquean E5 y E6)
 
 - [ ] **1. ¿De dónde sale el precio de mercado?** La pregunta más importante del plan. Sin fuente

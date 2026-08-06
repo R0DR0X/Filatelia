@@ -5,6 +5,11 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   FileUp,
+  Stamp,
+  Users,
+  Library,
+  Layers,
+  BarChart3,
   LogOut
 } from "lucide-react";
 import { logout } from "@/lib/auth";
@@ -21,8 +26,18 @@ export default function AdminLayout({
     window.location.href = "/";
   };
 
+  // Every admin page that exists belongs here. Five of these were built and
+  // then never linked — /admin/sellos, /admin/usuarios, /admin/catalogos,
+  // /admin/grupos and /admin/analitica were reachable only by typing the URL,
+  // so the panel looked like it did two things when it does seven. An
+  // unlinked page is indistinguishable from a missing feature.
   const sidebarItems = [
     { href: "/admin/dashboard", icon: LayoutDashboard, label: "Resumen" },
+    { href: "/admin/sellos", icon: Stamp, label: "Sellos" },
+    { href: "/admin/catalogos", icon: Library, label: "Catálogos" },
+    { href: "/admin/grupos", icon: Layers, label: "Grupos" },
+    { href: "/admin/usuarios", icon: Users, label: "Usuarios" },
+    { href: "/admin/analitica", icon: BarChart3, label: "Analítica" },
     { href: "/admin/importar", icon: FileUp, label: "Importar Excel" },
   ];
 

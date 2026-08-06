@@ -24,6 +24,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -450,6 +451,54 @@ def _resolve_colnect_country_id(basic_data, country_id=None):
     return ""
 
 
+def _clean_cell(value):
+    """Normalise a scraped cell to a real value or None.
+
+    The Worker upserts every detail field with COALESCE(excluded.x, x), which
+    treats "" as a value, not as an absence. Returning an empty string here
+    would make the detail phase OVERWRITE a good listing-phase value with
+    nothing — the run would destroy data instead of enriching it.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_variants(soup, source_url):
+    """Extract the variants behind Colnect's "Click to see variants" (E2.5).
+
+    Returns a list, never None: the importer distinguishes "no variants" from
+    "variants not parsed", and an absent JSON key travels differently from [].
+    """
+    variants = []
+    seen_urls = set()
+
+    for el in soup.select("div.variants a.variant, .item_variants a, a.variant"):
+        href = el.get("href")
+        variant_url = urljoin(source_url, href) if href else None
+        # The same variant can be reachable from more than one node on the
+        # page; the DB has a UNIQUE index on sourceUrl, so a duplicate here
+        # would make the whole batch's variant upsert fail.
+        if variant_url and variant_url in seen_urls:
+            continue
+        if variant_url:
+            seen_urls.add(variant_url)
+
+        name_el = el.select_one(".variant_name, .name")
+        code_el = el.select_one(".variant_code, .code")
+        name = _clean_cell(name_el.get_text() if name_el else el.get_text())
+
+        variants.append({
+            "nameEn":      name,
+            "nameEs":      name,
+            "colnectCode": _clean_cell(code_el.get_text() if code_el else None),
+            "sourceUrl":   variant_url,
+        })
+
+    return variants
+
+
 def parse_detail_page(html, source_url, basic_data, country_id=None):
     """Parse an individual stamp detail page."""
     soup = BeautifulSoup(html, "html.parser")
@@ -512,13 +561,23 @@ def parse_detail_page(html, source_url, basic_data, country_id=None):
         "scottNumber":    basic_data.get("scottNumber"),
         "michelNumber":   basic_data.get("michelNumber"),
         "yvertNumber":    basic_data.get("yvertNumber"),
-        "color":          info.get("colors") or basic_data.get("color"),
-        "theme":          info.get("themes") or basic_data.get("theme"),
-        "perforation":    info.get("perforation"),
-        "printTechnique": info.get("printing"),
-        "paperType":      info.get("paper"),
-        "descriptionEs":  info.get("description") or basic_data.get("descriptionEs"),
+        "color":          _clean_cell(info.get("colors")) or basic_data.get("color"),
+        "theme":          _clean_cell(info.get("themes")) or basic_data.get("theme"),
+        "perforation":    _clean_cell(info.get("perforation")),
+        "printTechnique": _clean_cell(info.get("printing")),
+        "paperType":      _clean_cell(info.get("paper")),
+        # E2.3 — the four fields the detail page (E3) needs but nothing ever
+        # parsed. `sizeMm` is the reason all 147,555 production rows have a
+        # NULL size: the column existed, the parser never filled it.
+        "sizeMm":         _clean_cell(info.get("size")),
+        "format":         _clean_cell(info.get("format")),
+        "emission":       _clean_cell(info.get("emission")),
+        "gum":            _clean_cell(info.get("gum")),
+        "colnectCode":    _clean_cell(info.get("colnect code")),
+        "descriptionEs":  _clean_cell(info.get("description")) or basic_data.get("descriptionEs"),
         "series":         basic_data.get("series"),
+        # E2.5 — always a list, so the importer can tell "none" from "unknown".
+        "variants":       _parse_variants(soup, source_url),
     }
 
 

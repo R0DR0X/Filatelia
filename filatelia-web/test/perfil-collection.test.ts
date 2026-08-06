@@ -4,10 +4,10 @@ import { UserCollectionItem, ListType, ConditionGrade } from "../src/types/colle
 
 test("Collection tab filtering logic works as expected", () => {
   const items: UserCollectionItem[] = [
-    { id: 1, userId: "usr_1", stampId: "s1", listType: "collection", condition: "MNH", createdAt: "", updatedAt: "" },
-    { id: 2, userId: "usr_1", stampId: "s2", listType: "wishlist", condition: "MH", createdAt: "", updatedAt: "" },
-    { id: 3, userId: "usr_1", stampId: "s3", listType: "trade", condition: "Used", createdAt: "", updatedAt: "" },
-    { id: 4, userId: "usr_1", stampId: "s4", listType: "trade", condition: "FDC", createdAt: "", updatedAt: "" },
+    { id: 1, userId: "usr_1", stampId: "s1", listType: "collection", condition: "MNH", quantity: 1, createdAt: "", updatedAt: "" },
+    { id: 2, userId: "usr_1", stampId: "s2", listType: "wishlist", condition: "MH", quantity: 1, createdAt: "", updatedAt: "" },
+    { id: 3, userId: "usr_1", stampId: "s3", listType: "trade", condition: "Used", quantity: 1, createdAt: "", updatedAt: "" },
+    { id: 4, userId: "usr_1", stampId: "s4", listType: "trade", condition: "FDC", quantity: 1, createdAt: "", updatedAt: "" },
   ];
 
   const collectionItems = items.filter(i => i.listType === "collection");

@@ -4,12 +4,16 @@ import { useState, useEffect } from "react";
 import { ShoppingBag, Search, Filter, Truck, ShieldCheck, Sparkles, Plus, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCartStore } from "@/store/useCartStore";
+import { formatOrderMoney } from "@/lib/checkout";
 
 interface Product {
   id: string;
   name: string;
   description?: string;
   price: number;
+  // Nullable: most rows have not declared one yet (see
+  // db/migrations/0011_add_product_currency.sql). Never assumed to be USD.
+  currency?: string | null;
   stock: number;
   status: string;
   categoryId?: string;
@@ -64,6 +68,8 @@ export default function TiendaPage() {
       id: product.id,
       title: product.name,
       price: product.price,
+      // Carried through as-is (nullable) — never defaulted to USD/PEN here.
+      currency: product.currency ?? null,
       quantity: 1,
       image: product.imageUrl || "/images/products/clasificador-64-marron.jpeg",
     });
@@ -213,7 +219,7 @@ export default function TiendaPage() {
                       <div>
                         <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Precio Un.</div>
                         <div className="text-2xl font-mono font-bold text-amber-400">
-                          ${product.price.toFixed(2)}
+                          {formatOrderMoney(product.price, product.currency)}
                         </div>
                       </div>
 

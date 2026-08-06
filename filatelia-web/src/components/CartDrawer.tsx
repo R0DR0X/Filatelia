@@ -1,12 +1,22 @@
 "use client"
 
 import { useCartStore } from "@/store/useCartStore"
-import { ShoppingCart, X, Plus, Minus, Trash2, ArrowRight } from "lucide-react"
+import { ShoppingCart, X, Plus, Minus, Trash2, ArrowRight, AlertTriangle } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
+import { formatOrderMoney, summarizeCartCurrency } from "@/lib/checkout"
 
 export default function CartDrawer() {
-  const { items, isOpen, closeCart, removeItem, updateQuantity, getTotal, getItemCount } = useCartStore()
+  const { items, isOpen, closeCart, removeItem, updateQuantity, getItemCount } = useCartStore()
+
+  // The cart can hold items whose catalog row has no declared currency yet,
+  // or a mix of currencies — summing raw prices in that case produces a
+  // number that means nothing. `summarizeCartCurrency` refuses instead of
+  // guessing; the subtotal line below shows that refusal in Spanish rather
+  // than a misleading total.
+  const currencySummary = summarizeCartCurrency(
+    items.map((item) => ({ price: item.price, quantity: item.quantity, currency: item.currency }))
+  )
 
   return (
     <AnimatePresence>
@@ -66,7 +76,9 @@ export default function CartDrawer() {
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-1">
                         <h3 className="text-sm font-bold text-zinc-100 truncate pr-2 uppercase leading-tight">{item.title}</h3>
-                        <span className="text-sm font-mono text-moss-green-light">${(item.price * item.quantity).toFixed(2)}</span>
+                        <span className="text-sm font-mono text-moss-green-light">
+                          {formatOrderMoney(item.price * item.quantity, item.currency)}
+                        </span>
                       </div>
                       <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-3">Scott: {item.scott || "N/A"}</p>
                       
@@ -104,9 +116,24 @@ export default function CartDrawer() {
               <div className="p-6 bg-black border-t border-white/10 space-y-4 shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-zinc-500 uppercase tracking-widest font-bold">Subtotal</span>
-                  <span className="text-xl font-mono text-white font-bold">${getTotal().toFixed(2)}</span>
+                  <span className="text-xl font-mono text-white font-bold">
+                    {currencySummary.ok && currencySummary.currency
+                      ? formatOrderMoney(currencySummary.subtotal, currencySummary.currency)
+                      : "—"}
+                  </span>
                 </div>
-                <p className="text-[10px] text-zinc-600 italic">Impuestos y envío calculados en el checkout.</p>
+                {/* `=== false`, not `!currencySummary.ok` — see the note in
+                    src/app/(public)/checkout/page.tsx: negated boolean
+                    discriminants don't narrow under this project's
+                    `strict: false` tsconfig. */}
+                {currencySummary.ok === false ? (
+                  <div className="flex items-start gap-2 text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5">
+                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                    <span>{currencySummary.message}</span>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-zinc-600 italic">Impuestos y envío calculados en el checkout.</p>
+                )}
                 <Link 
                   href="/checkout" 
                   onClick={closeCart}

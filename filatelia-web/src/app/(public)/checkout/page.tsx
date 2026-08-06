@@ -1,22 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCartStore } from "@/store/useCartStore";
-import { PaymentMethod, ShippingDetails, OrderRecord } from "@/types/order";
-import { 
-  ShoppingBag, 
-  Trash2, 
-  Plus, 
-  Minus, 
-  CheckCircle2, 
-  AlertCircle, 
-  CreditCard, 
-  QrCode, 
-  Landmark, 
+import { getMe } from "@/lib/auth";
+import {
+  formatOrderMoney,
+  interpretOrderResponse,
+  resolveShippingCost,
+  summarizeCartCurrency,
+  type OrderCurrency,
+} from "@/lib/checkout";
+import { OrderItem, PaymentMethod, ShippingDetails } from "@/types/order";
+import {
+  ShoppingBag,
+  Trash2,
+  Plus,
+  Minus,
+  CheckCircle2,
+  AlertCircle,
+  CreditCard,
+  QrCode,
+  Landmark,
   ArrowLeft,
+  LogIn,
   Loader2
 } from "lucide-react";
+
+// Same three-state identity handling as CollectionControl.tsx / Navbar.tsx:
+// while /api/auth/me hasn't answered, the page must not claim "you are
+// logged out" (which would flash for an authenticated buyer) nor act as if
+// logged in. `unavailable` keeps whatever we knew, i.e. stays unknown.
+type Identity = { status: "unknown" } | { status: "authenticated" } | { status: "anonymous" };
 
 export default function CheckoutPage() {
   const { items, removeItem, updateQuantity, clearCart, getTotal } = useCartStore();
@@ -33,11 +48,63 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [completedOrder, setCompletedOrder] = useState<{ orderId: string } | null>(null);
+  const [priceNotice, setPriceNotice] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<Identity>({ status: "unknown" });
+  const [completedOrder, setCompletedOrder] = useState<{
+    orderId: string;
+    totalAmount: number;
+    currency: OrderCurrency | null;
+  } | null>(null);
 
-  const subtotal = getTotal();
-  const shippingCost = items.length > 0 ? 15.00 : 0.00;
-  const totalAmount = subtotal + shippingCost;
+  // Ask BEFORE the buyer fills anything in. POST /api/orders answers 401 to
+  // an anonymous caller, and this page used to have no gate at all: a
+  // logged-out shopper completed the whole shipping form only to be shown
+  // the raw server string "Unauthenticated" in an otherwise Spanish UI.
+  useEffect(() => {
+    getMe().then((result) => {
+      if (result.status === "unavailable") return;
+      setIdentity({ status: result.status === "authenticated" ? "authenticated" : "anonymous" });
+    });
+  }, []);
+
+  // The cart can hold a `Product`-sourced line with no declared currency
+  // (most rows today — see db/migrations/0011_add_product_currency.sql) or a
+  // mix of currencies. `summarizeCartCurrency` refuses to produce a single
+  // total in either case instead of guessing; `currencyIssue` carries the
+  // Spanish explanation shown to the buyer and blocks submission below.
+  const currencySummary = summarizeCartCurrency(
+    items.map((item) => ({ price: item.price, quantity: item.quantity, currency: item.currency }))
+  );
+  const resolvedCurrency = currencySummary.ok ? currencySummary.currency : null;
+  const shippingCost = resolvedCurrency ? resolveShippingCost(resolvedCurrency) : null;
+  const subtotal = currencySummary.ok ? currencySummary.subtotal : 0;
+  const totalAmount = shippingCost !== null ? subtotal + shippingCost : 0;
+
+  // NOTE: `=== false`, not `!currencySummary.ok` — under this project's
+  // `strict: false` tsconfig, TS fails to narrow a discriminated union
+  // through a negated boolean discriminant (verified: `!x.ok` does not
+  // narrow, `x.ok === false` does). This is a tsc quirk, not a style choice.
+  const currencyIssue: string | null = currencySummary.ok === false
+    ? currencySummary.message
+    : resolvedCurrency && shippingCost === null
+    ? `No hay una tarifa de envío configurada para ${resolvedCurrency}. No podemos completar tu ` +
+      `pedido en esta moneda todavía: contáctanos o quita ese artículo del carrito.`
+    : null;
+
+  // Cart prices are frozen in localStorage at add-to-cart time (zustand
+  // persist, key `filatelia-cart`), so they can drift from the live catalog.
+  // When the server reports a drift it sends back the prices it actually
+  // computed; adopt them so the summary, the button and the next submission
+  // all show the same real number the buyer is being asked to confirm.
+  const applyServerPrices = (serverItems: OrderItem[]) => {
+    useCartStore.setState((state) => ({
+      items: state.items.map((line) => {
+        const priced = serverItems.find((i) => i.id === line.id);
+        if (!priced) return line;
+        return { ...line, price: priced.price, title: priced.title, scott: priced.scott ?? line.scott };
+      }),
+    }));
+  };
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -65,9 +132,22 @@ export default function CheckoutPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError(null);
+    setPriceNotice(null);
 
     if (items.length === 0) {
       setApiError("El carrito está vacío.");
+      return;
+    }
+
+    if (identity.status === "anonymous") {
+      setApiError("Inicia sesión para completar tu pedido. Tu carrito se conserva.");
+      return;
+    }
+
+    // Refuse to submit rather than send a total we cannot vouch for. The
+    // banner rendered from `currencyIssue` already told the buyer why.
+    if (currencyIssue) {
+      setApiError(currencyIssue);
       return;
     }
 
@@ -84,46 +164,48 @@ export default function CheckoutPage() {
         paymentMethod,
         subtotal,
         shippingCost,
+        // The total the buyer is confirming on screen. The server compares
+        // it against the live catalog and refuses to persist a different
+        // one, so no order can exist for an amount they never saw.
         totalAmount,
       };
 
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      // The server's own `error` string is English and, on failure paths,
+      // describes internal infrastructure. It is never rendered.
+      const outcome = interpretOrderResponse(res.status, data);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "No se pudo procesar el pedido");
+      if (outcome.kind === "created") {
+        // Order history now lives in D1 and is read back from /api/orders
+        // (see PerfilClient.tsx) — no client-side cache is needed or kept.
+        clearCart();
+        setCompletedOrder({ orderId: outcome.orderId, totalAmount: outcome.totalAmount, currency: outcome.currency });
+        return;
       }
 
-      // Save order to localStorage for profile view
-      const newOrderRecord: OrderRecord = {
-        id: data.orderId,
-        date: new Date().toISOString().split("T")[0],
-        itemsCount: items.reduce((acc, item) => acc + item.quantity, 0),
-        totalAmount,
-        status: "Pending",
-        shippingDetails,
-        paymentMethod,
-        items: [...items],
-      };
-
-      if (typeof window !== "undefined") {
-        try {
-          const stored = localStorage.getItem("fp_orders");
-          const existingOrders = stored ? JSON.parse(stored) : [];
-          localStorage.setItem("fp_orders", JSON.stringify([newOrderRecord, ...existingOrders]));
-        } catch {}
+      if (outcome.kind === "price-changed") {
+        applyServerPrices(outcome.items);
+        setPriceNotice(outcome.message);
+        return;
       }
 
-      // Clear cart on success
-      clearCart();
-      setCompletedOrder({ orderId: data.orderId });
-    } catch (err: any) {
-      setApiError(err.message || "Ocurrió un error inesperado al procesar el pedido.");
+      if (outcome.kind === "unauthenticated") {
+        // The cookie died mid-submit (or never existed). Switch the page to
+        // the anonymous state so the login prompt appears instead of the
+        // same failure repeating on every click.
+        setIdentity({ status: "anonymous" });
+      }
+
+      setApiError(outcome.message);
+    } catch {
+      setApiError("No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.");
     } finally {
       setSubmitting(false);
     }
@@ -140,8 +222,15 @@ export default function CheckoutPage() {
           <p className="text-zinc-400 text-sm mb-6">
             Gracias por tu compra. Tu orden ha sido registrada exitosamente con el código:
           </p>
-          <div className="bg-black/60 border border-white/10 rounded-xl p-4 mb-8 font-mono text-xl text-emerald-400 font-bold tracking-wider">
+          <div className="bg-black/60 border border-white/10 rounded-xl p-4 mb-4 font-mono text-xl text-emerald-400 font-bold tracking-wider">
             {completedOrder.orderId}
+          </div>
+          {/* The total the SERVER persisted, not the client's arithmetic. */}
+          <div className="mb-8 text-sm text-zinc-300">
+            Total registrado:{" "}
+            <span className="font-mono font-bold text-white">
+              {formatOrderMoney(completedOrder.totalAmount, completedOrder.currency)}
+            </span>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
@@ -195,6 +284,40 @@ export default function CheckoutPage() {
             <p className="text-zinc-400 text-xs mt-0.5">Revisa tus sellos filatélicos y completa los datos de entrega.</p>
           </div>
         </div>
+
+        {/* FIX: told BEFORE the form is filled in, in Spanish, with a way
+            back to checkout. Deliberately not a redirect — the buyer is
+            still shopping and their cart must stay where it is. */}
+        {identity.status === "anonymous" && (
+          <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-300 text-sm">
+            <span>
+              Necesitas iniciar sesión para completar tu pedido. Tu carrito se conserva mientras tanto.
+            </span>
+            <Link
+              href="/login?from=%2Fcheckout"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors whitespace-nowrap"
+            >
+              <LogIn size={14} /> Iniciar sesión
+            </Link>
+          </div>
+        )}
+
+        {priceNotice && (
+          <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3 text-amber-300 text-sm">
+            <AlertCircle size={20} className="shrink-0 mt-0.5" />
+            <span>{priceNotice}</span>
+          </div>
+        )}
+
+        {/* Told BEFORE the buyer tries to submit: an unresolved or mixed
+            currency means the total shown below cannot be trusted, so the
+            order cannot be completed until it is fixed in the catalog. */}
+        {currencyIssue && (
+          <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3 text-amber-300 text-sm">
+            <AlertCircle size={20} className="shrink-0 mt-0.5" />
+            <span>{currencyIssue}</span>
+          </div>
+        )}
 
         {apiError && (
           <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3 text-red-400 text-sm">
@@ -368,7 +491,7 @@ export default function CheckoutPage() {
                     <div className="flex-1 min-w-0">
                       <h4 className="text-xs font-bold text-white truncate">{item.title}</h4>
                       {item.scott && <p className="text-[10px] text-emerald-400 font-mono">{item.scott}</p>}
-                      <p className="text-xs text-zinc-400 mt-0.5">S/. {item.price.toFixed(2)} c/u</p>
+                      <p className="text-xs text-zinc-400 mt-0.5">{formatOrderMoney(item.price, item.currency)} c/u</p>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -406,30 +529,36 @@ export default function CheckoutPage() {
               <div className="space-y-2 border-t border-white/10 pt-4 text-xs">
                 <div className="flex justify-between text-zinc-400">
                   <span>Subtotal</span>
-                  <span>S/. {subtotal.toFixed(2)}</span>
+                  <span>{formatOrderMoney(subtotal, resolvedCurrency)}</span>
                 </div>
                 <div className="flex justify-between text-zinc-400">
                   <span>Costo de Envío (Asegurado)</span>
-                  <span>S/. {shippingCost.toFixed(2)}</span>
+                  <span>{shippingCost !== null ? formatOrderMoney(shippingCost, resolvedCurrency) : "—"}</span>
                 </div>
                 <div className="flex justify-between text-base font-bold text-white border-t border-white/10 pt-3">
                   <span>Total</span>
-                  <span className="text-emerald-400">S/. {totalAmount.toFixed(2)}</span>
+                  <span className="text-emerald-400">
+                    {currencyIssue ? "—" : formatOrderMoney(totalAmount, resolvedCurrency)}
+                  </span>
                 </div>
               </div>
 
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={submitting}
-                className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer"
+                disabled={submitting || identity.status === "anonymous" || Boolean(currencyIssue)}
+                className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {submitting ? (
                   <>
                     <Loader2 size={16} className="animate-spin" /> Procesando Pedido...
                   </>
+                ) : identity.status === "anonymous" ? (
+                  <>Inicia sesión para continuar</>
+                ) : currencyIssue ? (
+                  <>Pedido no disponible por moneda</>
                 ) : (
-                  <>Confirmar y Pagar (S/. {totalAmount.toFixed(2)})</>
+                  <>Confirmar y Pagar ({formatOrderMoney(totalAmount, resolvedCurrency)})</>
                 )}
               </button>
             </div>

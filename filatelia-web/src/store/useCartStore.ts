@@ -8,6 +8,12 @@ export interface CartItem {
   quantity: number
   image?: string
   scott?: string
+  // ISO currency code ('USD' | 'PEN') the `price` above is denominated in,
+  // or null/undefined when the source catalog row hasn't declared one yet
+  // (most `Product` rows today — see db/migrations/0011_add_product_currency.sql).
+  // Never guessed or defaulted; the checkout UI must show "unknown" rather
+  // than a number that implies a currency.
+  currency?: string | null
 }
 
 interface CartStore {
@@ -69,6 +75,12 @@ export const useCartStore = create<CartStore>()(
 
       clearCart: () => set({ items: [] }),
 
+      // CURRENCY-UNAWARE by design: this sums raw numbers regardless of
+      // each item's `currency`, which is meaningless for a mixed-currency
+      // cart. Kept only as a raw arithmetic helper; anything that RENDERS
+      // a total to the buyer must go through
+      // `summarizeCartCurrency()` (src/lib/orderCurrency.ts) instead, which
+      // refuses to produce a total for an unknown or mixed-currency cart.
       getTotal: () => {
         return get().items.reduce((total, item) => total + item.price * item.quantity, 0)
       },

@@ -1656,6 +1656,61 @@ export async function requireAdmin(c: any): Promise<any | null> {
   return null;
 }
 
+// ==========================================
+// ADMIN: detail-queue — stamps that still need the Colnect detail phase
+// ==========================================
+//
+// This exists to replace `scrapers/seed_crawler_queue.py`'s data source. That
+// script rebuilt the scraper's queue by POSTing raw SQL to `/query`, the SQL
+// gateway removed in E0 — a gateway with a password is still a gateway, so it
+// is not coming back. The script has therefore been dead since that removal,
+// and the queue cannot be re-seeded without something like this.
+//
+// It answers one fixed question — "which Colnect stamps have no detail data
+// yet?" — behind `requireAdmin`, instead of accepting arbitrary SQL. The
+// scrapers already hold `ADMIN_API_TOKEN`, so nothing new is handed out.
+//
+// KEYSET PAGINATION, not OFFSET. The caller walks 36k+ rows and the writer
+// (the detail phase) is filling these very columns while it walks. With
+// OFFSET, every stamp that gains detail data mid-walk shifts the window and
+// silently skips a row. Paging on `id > cursor` cannot skip: rows leave the
+// result set, they never reorder.
+app.get('/admin/detail-queue', async (c) => {
+  try {
+    const admin = await requireAdmin(c);
+    if (!admin) return c.json({ success: false, error: 'Forbidden' }, 403);
+
+    const limit  = Math.min(5000, Math.max(1, parseInt(c.req.query('limit') || '1000')));
+    const cursor = c.req.query('cursor') || '';
+    const source = c.req.query('source') || 'colnect';
+
+    // "Needs detail" is defined by the fields only the detail page carries.
+    // `perforation` was the original script's marker; the E3 columns are
+    // included because a stamp scraped before migration 0012 has a
+    // perforation but none of the rest, and it still needs a revisit.
+    const rows = await c.env.DB.prepare(`
+      SELECT id, sourceUrl, countryCode, year, nameEn
+      FROM Stamp
+      WHERE source = ?
+        AND sourceUrl IS NOT NULL
+        AND id > ?
+        AND (perforation IS NULL OR sizeMm IS NULL OR colnectCode IS NULL)
+      ORDER BY id ASC
+      LIMIT ?
+    `).bind(source, cursor, limit).all();
+
+    const items = rows.results || [];
+    // The cursor is the last id of this page; absent when the walk is done.
+    const nextCursor = items.length === limit
+      ? (items[items.length - 1] as any).id
+      : null;
+
+    return c.json({ success: true, items, nextCursor, count: items.length });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 app.get('/admin/stamps', async (c) => {
   try {
     const admin = await requireAdmin(c);

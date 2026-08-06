@@ -12,6 +12,21 @@ E0 (seguridad) ─┬─> E1 (auth) ──> E4 (cuenta) ──> E5 (valoración)
 
 ---
 
+## Estado al 2026-08-06
+
+**En producción y funcionando**: E0, E1, E3 y E4. Las migraciones 0009-0015
+están aplicadas en D1. Worker y Pages desplegados.
+
+**Lo único que separa el proyecto de "solo subir sellos"** son cinco cosas, y
+solo dos son técnicas. Están todas abajo en "Para poder dedicarte solo a subir
+sellos".
+
+**E5 (valoración) y E6 (IA de condición) NO bloquean subir sellos.** Están
+esperando decisiones de producto tuyas, no código. Se pueden dejar quietas
+indefinidamente sin que nada se rompa.
+
+---
+
 ## E0 — Cerrar vulnerabilidades ✅ CERRADO (desplegado 2026-08-02)
 
 - [x] **E0.1** Test: `POST /query` con `sql` y sin credenciales devuelve 401
@@ -115,7 +130,7 @@ Artefactos archivados en `openspec/changes/archive/2026-08-02-unified-session/`.
 - [x] **E4.6** Pedidos reales en D1 (`Order` / `OrderItem`), sin mocks
 - [x] **E4.7** Tests del flujo de listas
 
-## E5 — Valoración de colección
+## E5 — Valoración de colección ⏸️ NO BLOQUEA NADA
 
 > ⚠️ Bloqueada por la pregunta abierta #1. `conditionMintUsd`, `conditionUsedUsd`,
 > `marketPriceUsd` y `rarityScore` existen en el schema pero están **sin poblar**.
@@ -128,7 +143,7 @@ Artefactos archivados en `openspec/changes/archive/2026-08-02-unified-session/`.
 - [ ] **E5.6** Mostrar valor total e histórico en `/perfil`
 - [ ] **E5.7** Etiquetar el valor como **estimación**, con su fuente y fecha
 
-## E6 — IA de calificación de condición
+## E6 — IA de calificación de condición ⏸️ NO BLOQUEA NADA
 
 > ⚠️ Bloqueada por la pregunta abierta #2. La IA actual identifica *qué* sello es
 > (`/api/identify` → `/query`), no *en qué estado* está. Eso no existe.
@@ -146,6 +161,49 @@ Artefactos archivados en `openspec/changes/archive/2026-08-02-unified-session/`.
 No se diseña todavía. "No sé cómo les gusta a los filatélicos" es la razón exacta para no
 construirlo: un modelo de lotes basado en intuición sin validar es la forma más cara de
 descubrir que nadie lo usa. Se define observando usuarios reales o preguntándole a un filatélico.
+
+---
+
+## Para poder dedicarte solo a subir sellos
+
+Todo lo demás está hecho. Esto es lo que queda, en orden.
+
+### Técnico — lo hace un dev
+
+- [ ] **T1. Rotar `APP_SECRET`.** Firma la cookie de sesión y **está en el historial
+  de git**: hay que darlo por filtrado. Quien lo tenga puede falsificar la sesión de
+  cualquier usuario, incluido el admin. Es la única vulnerabilidad abierta que queda.
+  Rotarlo desloguea a todos, nada más — hoy hay 1 usuario, así que el costo es cero.
+  Cuanto más usuarios tengas, más caro sale. **Hacerlo ahora.**
+  ```
+  npx wrangler pages secret put APP_SECRET
+  ```
+- [ ] **T2. Provisionar la VM peruana** `ssh rodrigo@100.75.97.61` (E2.1 + E2.2):
+  venv, pip, playwright, chromium, clonar el repo, y dejar las cookies de Colnect.
+  Shell es `fish` → envolver todo en `bash -lc`. `ADMIN_API_TOKEN` ya está en el
+  entorno de esa VM. Sin esto no hay desde dónde correr el scraper.
+- [ ] **T3. Verificar `/admin` en un navegador real** con sesión de verdad. Todas las
+  capas están probadas por separado; el flujo completo nunca se caminó. Es el último
+  cabo suelto de E0+E1.
+
+### No técnico — depende de vos
+
+- [ ] **T4. Pagar ancho de banda del proxy.** El scraper de Colnect está parado por
+  falta de GB en DataImpulse, no por código. Es la única razón por la que hay 14,396
+  sellos en cola sin procesar.
+- [ ] **T5. Revisar los términos de Colnect** antes de escalar de 36k a 500k sellos.
+  Riesgo legal, no técnico. Es la decisión #3 de abajo y es la que puede tirar abajo
+  todo el plan de scraping si sale mal — conviene mirarla **antes** de gastar en T4.
+
+Con T1-T4 resueltos, el ciclo de subir sellos queda así y no necesita más código:
+
+```
+E2.7  correr la fase de detalle sobre los 14,396 pendientes  (probar con 3 primero)
+E2.8  reanudar la fase de listado (61,981 páginas)
+```
+
+Las fichas se llenan solas a medida que entran los datos: el esquema, el Worker y la
+UI ya están desplegados esperándolos. **No hace falta otro deploy.**
 
 ---
 

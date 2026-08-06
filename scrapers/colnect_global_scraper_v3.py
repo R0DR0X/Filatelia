@@ -45,21 +45,22 @@ API_URL      = "https://filatelia-api.rodrigopianto2005.workers.dev/import-stamp
 QUERY_URL    = "https://filatelia-api.rodrigopianto2005.workers.dev/query"
 
 # ── Proxy (DataImpulse residential User B - active) ─────────────────────────
-# The DataImpulse proxy is OPTIONAL, and defaults to off.
+# The DataImpulse proxy is ON by default. Set USE_PROXY=0 to run direct.
 #
-# Its only job was to make requests come from a residential IP. The machine
-# this scraper is meant to run on — the Piura VM, 100.75.97.61 — already has
-# one: its egress is 179.7.15.36, AS12252 América Móvil Perú (Claro), a
-# residential Peruvian connection. Paying a proxy to borrow the kind of IP the
-# host already has is buying something you own.
+# The default is a deliberate operator decision (Rodrigo, 2026-08-06): the
+# subscription is being paid for, so use it.
 #
-# Set USE_PROXY=1 to turn it back on, and then the three DataImpulse
-# variables become required. The reason to turn it on is NOT anonymity — it is
-# IP rotation. A long unthrottled crawl from one address risks that address
-# being blocked, and here that address is the VM's real Claro connection, not
-# a rented one. Prefer a slow, polite crawl first; reach for the proxy if
-# Colnect actually pushes back.
-USE_PROXY = os.environ.get("USE_PROXY", "").strip().lower() in {"1", "true", "yes"}
+# What running direct would buy, and why it is still not the default: the Piura
+# VM's own egress is 179.7.15.36, AS12252 América Móvil Perú (Claro) — already
+# a residential Peruvian address, which is the thing the proxy rents. So a
+# direct run is perfectly viable for a small crawl. What the proxy adds is IP
+# ROTATION, and that is the part worth paying for at volume: a long crawl from
+# one address risks that address being blocked, and direct, that address is
+# the VM's real Claro connection rather than a rented one.
+#
+# Keep USE_PROXY=0 for local parser work, a handful of test pages, or the day
+# the DataImpulse balance runs out and the crawl should not simply stop.
+USE_PROXY = os.environ.get("USE_PROXY", "1").strip().lower() not in {"0", "false", "no"}
 
 if USE_PROXY:
     PROXY_SERVER = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")

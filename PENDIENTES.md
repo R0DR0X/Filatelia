@@ -17,11 +17,12 @@ E0 (seguridad) ─┬─> E1 (auth) ──> E4 (cuenta) ──> E5 (valoración)
 **En producción y funcionando**: E0, E1, E3 y E4. Las migraciones 0009-0015
 están aplicadas en D1. Worker y Pages desplegados.
 
-**Lo único que separa el proyecto de "solo subir sellos"** es **rotar `APP_SECRET`**
-(T1 abajo). Todo lo demás de esa lista está cerrado al 2026-08-06: la VM está
-provisionada, `/admin` revisado, y Colnect confirmó por escrito que habilita el
-acceso. El proxy pasó a ser opcional — la VM ya sale por una IP residencial de
-Claro Perú, que es justo lo que el proxy vendía.
+**Ya no queda nada bloqueando "solo subir sellos".** Al 2026-08-06 está todo cerrado:
+`APP_SECRET` rotado, la VM de Piura provisionada, `/admin` revisado y con sus siete
+secciones enlazadas, Colnect habilitó el acceso, y se sigue con DataImpulse.
+
+Lo único que falta es **saldo en el proxy**, y después correr E2.7 y E2.8. Eso no es
+desarrollo, es operación.
 
 **E5 (valoración) y E6 (IA de condición) NO bloquean subir sellos.** Están
 esperando decisiones de producto tuyas, no código. Se pueden dejar quietas
@@ -172,14 +173,13 @@ Todo lo demás está hecho. Esto es lo que queda, en orden.
 
 ### Técnico — lo hace un dev
 
-- [ ] **T1. Rotar `APP_SECRET`.** Firma la cookie de sesión y **está en el historial
-  de git**: hay que darlo por filtrado. Quien lo tenga puede falsificar la sesión de
-  cualquier usuario, incluido el admin. Es la única vulnerabilidad abierta que queda.
-  Rotarlo desloguea a todos, nada más — hoy hay 1 usuario, así que el costo es cero.
-  Cuanto más usuarios tengas, más caro sale. **Hacerlo ahora.**
-  ```
-  npx wrangler pages secret put APP_SECRET
-  ```
+- [x] **T1. `APP_SECRET` rotado** por Rodrigo, 2026-08-06. El valor viejo estaba en el
+  historial de git y hay que seguir dándolo por filtrado, pero ya no sirve para nada.
+  Verificado en producción después de rotar: el secreto está presente en Pages, y una
+  cookie `fp_session` falsificada devuelve **401, no 500** — o sea la verificación HMAC
+  corre y rechaza. `/api/auth/me` sin cookie da 401, `/login` da 200, `/admin` redirige.
+  *No verificado*: que un login real genere sesión válida, porque no tengo credenciales
+  de usuario. Eso se comprueba entrando una vez.
 - [x] **T2. VM peruana provisionada** (E2.1 + E2.2), 2026-08-06. `scrapers/venv` con
   todo lo de `scrapers/requirements.txt`, y Chromium de Playwright verificado
   arrancando y saliendo a la red. El repo ya estaba clonado — la nota vieja que decía
@@ -191,19 +191,24 @@ Todo lo demás está hecho. Esto es lo que queda, en orden.
   cosa: el menú lateral listaba **2 secciones de 7**. Sellos, Catálogos, Grupos,
   Usuarios y Analítica estaban implementadas y solo se llegaba tecleando la URL.
   Ya están enlazadas.
-- [ ] **T3b. Falta todavía**: no hay página de admin para revisar la cola del scraper
-  ni el estado de los 14,396 pendientes. Hoy eso se mira por SSH.
+- [~] **T3b. La cola del scraper se mira por terminal, y así se queda.** Decisión de
+  Rodrigo (2026-08-06): no se construye pantalla de admin para los 14,396 pendientes.
+  Con un solo operador, un `ssh` y un `tail` hacen el trabajo y no hay que mantenerlos.
+  Reabrir esto solo si alguien más termina operando el scraper.
 
 ### No técnico — depende de vos
 
-- [~] **T4. Ancho de banda del proxy — puede que no haga falta.** El proxy existía solo
-  para que las peticiones salieran de una IP residencial. **Esta VM ya es una**: su
-  salida es `179.7.15.36`, `AS12252 América Móvil Perú` (Claro), residencial, en Piura.
-  Verificado desde la máquina. El scraper ahora corre sin proxy por defecto
-  (`USE_PROXY=1` lo reactiva). **La razón que queda para pagarlo no es anonimato, es
-  rotación de IP**: un crawl largo sin frenos puede hacer que bloqueen esa dirección, y
-  sin proxy esa dirección es tu conexión real de Claro, no una alquilada. Empezá lento
-  y con volumen bajo; pagá solo si Colnect te frena de verdad.
+- [x] **T4. Se sigue con DataImpulse.** Decisión de Rodrigo (2026-08-06): si hay que
+  pagarlo, se paga. El scraper usa el proxy **por defecto** y sigue exigiendo las tres
+  variables `DATAIMPULSE_*` al arrancar.
+  `USE_PROXY=0` corre directo, sin proxy y sin exigir credenciales. Sirve para trabajar
+  el parser en local, probar un puñado de páginas, o seguir crawleando el día que se
+  acabe el saldo en vez de que todo se detenga. Es viable porque la VM ya sale por
+  `179.7.15.36`, `AS12252 América Móvil Perú` (Claro), residencial, en Piura —
+  verificado desde la máquina. Lo que el proxy agrega sobre eso es **rotación de IP**,
+  y eso es lo que vale la pena pagar a volumen: un crawl largo desde una sola dirección
+  puede terminar con esa dirección bloqueada, y en directo esa dirección es la conexión
+  real de Claro, no una alquilada.
 - [x] **T5. Términos de Colnect: habilitan el acceso.** Confirmado por Rodrigo,
   hablado directamente con ellos (2026-08-06). Decisión #3 cerrada.
 

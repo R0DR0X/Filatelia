@@ -1199,6 +1199,29 @@ git commit -m "chore(ops): add a read-only Vectorize index status check"
 
 Ya está escrito y commiteado (`7cbbcef`); falta ejecutarlo.
 
+**Prerrequisitos, auditados en la VM el 2026-08-06.** Ninguno es código: los cuatro son cosas que tienen que existir antes de que esta tarea pueda correr. Se listan acá y no solo en `PENDIENTES.md` para que quien ejecute el plan no arranque a ciegas.
+
+| Falta | Detalle |
+| --- | --- |
+| El checkpoint | `colnect_v3_progress.db` **no existe en la VM**. Ahí viven `listing_pages` (61,981 páginas) y `stamp_queue` (14,396 sellos). Rodrigo lo tiene en otra máquina y lo va a subir. |
+| Credenciales | `DATAIMPULSE_HOST/USER/PASS` y `COLNECT_USER/PASS` no están en el entorno. Solo está `ADMIN_API_TOKEN`. Como `USE_PROXY` es 1 por defecto, el scraper ni arranca sin las tres de DataImpulse. |
+| Saldo | El proxy DataImpulse necesita GB. Decisión tomada: se paga y se sigue usando. |
+| Sesión de Colnect | `scrapers/colnect_cookies.json` es del **23 de julio**. Una petición directa desde la VM devolvió **HTTP 485 con cuerpo vacío** — el desafío de Anubis, no la página. Hay que renovar la sesión con `scrapers/vm_solve_anubis.py` / `refresh_cookies.py` antes de cualquier corrida. |
+
+**El orden está invertido respecto a lo que dice el plan original.** `stamp_queue` la llena la fase de listado. Si el checkpoint **se recupera**, se puede correr E2.7 (detalle) directo. Si **no** se recupera, hay dos caminos y no son equivalentes:
+
+- `seed_crawler_queue.py --apply` reconstruye `stamp_queue` desde los sellos que **ya están en D1**. Recupera el backlog de detalle sin volver a crawlear una sola página de listado, que es la mitad cara.
+- Reconstruir `listing_pages` **no tiene atajo**: son páginas que nunca se visitaron, así que D1 no sabe que existen. Solo salen de correr E2.8 de nuevo.
+
+- [ ] **Step 0: Verificar los cuatro prerrequisitos antes de seguir**
+
+```bash
+ls -la colnect_v3_progress.db 2>/dev/null || echo "FALTA el checkpoint"
+for v in DATAIMPULSE_HOST DATAIMPULSE_USER DATAIMPULSE_PASS COLNECT_USER COLNECT_PASS ADMIN_API_TOKEN; do
+  fish -c "set -q $v; and echo '$v ok'; or echo \"$v FALTA\""
+done
+```
+
 - [ ] **Step 1: Desplegar el Worker**
 
 ```bash
@@ -1237,6 +1260,18 @@ Antes de los 14,396. Con la migración 0013 aplicada, un lote que antes persist�
 3. **Fase 1 (subastas)** — mucho valor por poco trabajo: la lógica de pujas ya está escrita y probada, solo cambia dónde vive el estado.
 4. **Fase 4 (scraper)** — depende de recuperar el checkpoint y de las credenciales.
 5. **Fase 3 (Vectorize)** — es una verificación barata que puede convertirse en un proyecto grande; conviene saber el número antes de prometer nada.
+
+## Hallazgos que no son tareas
+
+Cosas que aparecieron auditando y que ya están decididas o cerradas. Se dejan escritas para que nadie las vuelva a "descubrir" y las reabra.
+
+- **Colnect autoriza el acceso.** Rodrigo lo habló directamente con ellos. **No tienen API ni export de datos disponibles**, así que el parser se queda. Decisión #3 del plan original: cerrada.
+- **No se va a pedir lista blanca de IP.** Se evaluó pedirle a Colnect que habilite `179.7.15.36` para saltear Anubis. Rodrigo decidió seguir con la solución que ya está construida (`vm_solve_anubis.py`), aunque sea el camino difícil. No reabrir.
+- **El proxy sigue siendo DataImpulse, por defecto.** Se descubrió que la VM ya sale por una IP residencial de Claro Perú (`179.7.15.36`, AS12252), que es justo lo que el proxy vende, y se dejó `USE_PROXY=0` como salida. Pero la decisión es pagar y usarlo: lo que el proxy agrega es **rotación de IP**, y sin él la dirección que se expone al bloqueo es la conexión real de la VM.
+- **La cola del scraper se mira por terminal.** Se descartó construir una pantalla de admin para los 14,396 pendientes. Con un operador, `ssh` y `tail` alcanzan. Reabrir solo si alguien más opera el scraper.
+- **`seed_crawler_queue.py` estaba muerto** desde E0 (mandaba SQL crudo al gateway `/query` eliminado) y además escribía en `crawler_progress.db`, una base que el scraper v3 no lee. Ya está reescrito (commit `7cbbcef`) contra `GET /admin/detail-queue`.
+- **E5 y E6 son por suscriptor.** Alcance definido por Rodrigo: el valor que se calcula es el de **tu** colección (Σ precio × multiplicador de condición × cantidad sobre tus filas de `UserCollection`), y el grado por IA aplica a la foto de **tu** ejemplar, no al sello del catálogo. El esquema ya lo soporta.
+- **`APP_SECRET` rotado** el 2026-08-06 y verificado: una cookie `fp_session` falsificada devuelve 401, no 500. Lo que **no** se verificó es que un login real genere sesión válida — falta hacerlo entrando una vez.
 
 ## Lo que este plan NO cubre, y por qué
 

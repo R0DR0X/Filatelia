@@ -68,36 +68,52 @@ Artefactos archivados en `openspec/changes/archive/2026-08-02-unified-session/`.
 
 - [ ] **E2.1** Provisionar la VM peruana `100.75.97.61`: venv, pip, playwright, chromium (shell es `fish` → usar `bash -lc`)
 - [ ] **E2.2** Desplegar scraper y cookies de Colnect en la VM
-- [ ] **E2.3** Añadir a `parse_detail_page`: `size`, `format`, `emission`, `gum`, código Colnect — `scrapers/colnect_global_scraper_v3.py:448`
-- [ ] **E2.4** Tests de parseo con HTML fijo (caso de oro: Mt Taranaki) — `scrapers/test_parse.py`
-- [ ] **E2.5** Extraer y modelar **variantes** ("Click to see variants")
-- [ ] **E2.6** Diagnosticar por qué el último lote persistió 0 de 3 en D1 — `send_batch_sync`
+- [x] **E2.3** `parse_detail_page` ya extrae `size` (→ `sizeMm`), `format`, `emission`, `gum` y el código Colnect
+- [x] **E2.4** Tests de parseo con HTML fijo (caso de oro: Mt Taranaki) — `scrapers/test_parse.py`, 11 tests.
+  El archivo con ese nombre **no era un test**: era un script que abría un navegador real contra Colnect
+  gastando proxy. Se conservó como `scrapers/debug_detail_page.py`
+- [x] **E2.5** Variantes extraídas por `_parse_variants` y modeladas en `StampVariant`
+- [x] **E2.6** **Diagnosticado y corregido.** No era `send_batch_sync`. `importStampHandler` hace
+  `ON CONFLICT(sourceUrl)` y `Stamp.sourceUrl` **nunca tuvo índice único**, así que SQLite rechaza
+  la sentencia *al parsearla*. Como los sellos de Colnect no traen `wnsNumber`, todos caen en esa
+  rama: el lote persiste 0 de N. Reproducido en `test/stamp-detail-schema.test.mjs`; lo arregla la
+  migración 0013. **Correr la fase de detalle antes de aplicar 0013 es quemar GB de proxy a cambio de nada.**
 - [ ] **E2.7** Correr la fase de detalle sobre los 14,396 pendientes y verificar persistencia
 - [ ] **E2.8** Reanudar la fase de listado (61,981 páginas pendientes) tras validar el detalle
 
-## E3 — Ficha con paridad Colnect
+## E3 — Ficha con paridad Colnect ✅ CÓDIGO LISTO, FALTA DESPLEGAR
 
-> La UI ya renderiza casi todo. Solo faltan 4 campos y las variantes.
+> Escrito y probado. Las migraciones 0012 y 0013 **no están aplicadas en producción**
+> (esta sesión no tenía `CLOUDFLARE_API_TOKEN`). Ver `scripts/ops/e3-rollout.sh`.
+>
+> La ficha degrada campo por campo: los cuatro campos nuevos están NULL en los 147,555
+> sellos hasta que corra la fase de detalle, y un campo NULL no se renderiza en vez de
+> mostrar una etiqueta vacía. Cuando el scraper corra, las fichas se llenan sin otro deploy.
 
-- [ ] **E3.1** Migración: `colnectCode`, `format`, `emission`, `gum` en `Stamp`
-- [ ] **E3.2** Migración: tabla de variantes (`StampVariant` o autorreferencia)
-- [ ] **E3.3** Exponer los campos nuevos en `GET /stamp/:id` — `workers/filatelia-api/src/index.ts:438`
-- [ ] **E3.4** Renderizar campos nuevos + variantes — `src/app/(public)/sello/[id]/SelloDetailClient.tsx`
-- [ ] **E3.5** Revisar `params.id` contra la versión de Next de este repo — `sello/[id]/page.tsx:6` (ver `AGENTS.md`)
-- [ ] **E3.6** Enlazar tema, país y serie como navegación (Colnect los hace clicables)
+- [x] **E3.1** Migración 0012: `colnectCode`, `format`, `emission`, `gum` en `Stamp`
+- [x] **E3.2** Migración 0012: tabla `StampVariant` (tabla hija, no autorreferencia — una
+  autorreferencia habría metido cada variante en `/stamps` y en la búsqueda como si fuera un sello más)
+- [x] **E3.3** `GET /stamp/:id` devuelve los campos nuevos y `variants`
+- [x] **E3.4** Ficha renderiza specs, variantes y los 5 códigos de catálogo — `SelloDetailClient.tsx`
+- [x] **E3.5** Revisado: `params` es `Promise` en Next 16.2.4 y `page.tsx` ya lo espera bien. Nada que cambiar
+- [x] **E3.6** Tema, país y serie clicables. **Ojo con lo que apareció acá**: el link de país ya existía
+  pero `BibliotecaClient` **nunca leía los search params**, así que navegaba y mostraba el catálogo sin
+  filtrar — un link muerto que parecía vivo. Arreglado, más los filtros `theme` y `groupId` en el Worker
 
-## E4 — Cuenta del coleccionista
+## E4 — Cuenta del coleccionista ✅ CÓDIGO EN MASTER, FALTA DESPLEGAR
 
-> `UserCollection` ya existe con collection/wishlist/trade y grados MNH/MH/Used/FDC.
-> Falta `ignore`, falta cantidad, y falta conectar la UI.
+> Estaba terminado en `feat/e4-collector-account` y sin mergear. Mergeado a master.
+> Migraciones 0009/0010/0011 **sin aplicar en producción** — ver `scripts/ops/e4-rollout.sh`,
+> y el orden ahí **sí importa**: si desplegás Pages antes de 0009 rompés toda escritura a
+> `/api/collection`, incluido el flujo que ya está vivo hoy.
 
-- [ ] **E4.1** Migración: añadir `ignore` a `list_type` + columna `quantity`
-- [ ] **E4.2** Actualizar validaciones — `src/lib/db/collection.ts`, `src/types/collection.ts`, `src/app/api/collection/route.ts`
-- [ ] **E4.3** **Conectar el botón muerto** "+ Añadir a Mi Colección" (no tiene `onClick`) — `SelloDetailClient.tsx:273`
-- [ ] **E4.4** Widget de 4 estados (collection / wish / swap / ignore) en la ficha, como Colnect
-- [ ] **E4.5** Crear la página `/colecciones` — hoy `src/app/(public)/colecciones/` es un **directorio vacío que da 404**
-- [ ] **E4.6** Reemplazar los pedidos mock hardcodeados — `src/app/perfil/PerfilClient.tsx:19-49`
-- [ ] **E4.7** Tests de integración del flujo completo de listas contra D1 real
+- [x] **E4.1** Migración 0009: `ignore` en `list_type` + columna `quantity`
+- [x] **E4.2** Validaciones unificadas en una sola fuente de verdad
+- [x] **E4.3** Botón muerto conectado
+- [x] **E4.4** Widget de 4 estados (collection / wish / swap / ignore) en la ficha
+- [x] **E4.5** Página `/colecciones` creada — era el 404
+- [x] **E4.6** Pedidos reales en D1 (`Order` / `OrderItem`), sin mocks
+- [x] **E4.7** Tests del flujo de listas
 
 ## E5 — Valoración de colección
 
@@ -149,7 +165,22 @@ descubrir que nadie lo usa. Se define observando usuarios reales o preguntándol
 
 **Producción** (D1 `filatelia-db`, verificado 2026-08-01): 147,555 sellos —
 wns 108,947 / colnect 36,596 / excel-import 1,940 / wikidata 66.
-`User` = 1 fila. `UserCollection` = 0 filas. **`sizeMm` está NULL en los 147,555.**
+`User` = 1 fila. `UserCollection` = 0 filas. **`sizeMm` está NULL en los 147,555**
+porque el parser nunca lo extrajo; la columna siempre existió (ya corregido, E2.3).
+
+**Migraciones pendientes de aplicar en producción**: 0009, 0010, 0011 (E4) y
+0012, 0013 (E3). Ninguna se aplicó todavía. Los dos scripts de rollout corren
+en seco por defecto y solo escriben con `--apply`:
+
+```
+bash scripts/ops/e4-rollout.sh      # E4 — el orden importa, leer la cabecera
+bash scripts/ops/e3-rollout.sh      # E3 + el fix E2.6
+```
+
+El de E3 cuenta primero los `sourceUrl` duplicados y **se niega** a crear el
+índice único mientras haya alguno: si los hay, significa que el importador
+venía tratando filas distintas como el mismo sello, y eso hay que mirarlo
+antes de borrar nada.
 
 **VM peruana**: `ssh rodrigo@100.75.97.61` (password auth). Piura, PE, Claro.
 Ubuntu, 4 vCPU, 15 GB RAM. Shell `fish`. Sin pip, sin playwright, sin chromium todavía.

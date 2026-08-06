@@ -17,9 +17,11 @@ E0 (seguridad) ─┬─> E1 (auth) ──> E4 (cuenta) ──> E5 (valoración)
 **En producción y funcionando**: E0, E1, E3 y E4. Las migraciones 0009-0015
 están aplicadas en D1. Worker y Pages desplegados.
 
-**Lo único que separa el proyecto de "solo subir sellos"** son cinco cosas, y
-solo dos son técnicas. Están todas abajo en "Para poder dedicarte solo a subir
-sellos".
+**Lo único que separa el proyecto de "solo subir sellos"** es **rotar `APP_SECRET`**
+(T1 abajo). Todo lo demás de esa lista está cerrado al 2026-08-06: la VM está
+provisionada, `/admin` revisado, y Colnect confirmó por escrito que habilita el
+acceso. El proxy pasó a ser opcional — la VM ya sale por una IP residencial de
+Claro Perú, que es justo lo que el proxy vendía.
 
 **E5 (valoración) y E6 (IA de condición) NO bloquean subir sellos.** Están
 esperando decisiones de producto tuyas, no código. Se pueden dejar quietas
@@ -178,24 +180,34 @@ Todo lo demás está hecho. Esto es lo que queda, en orden.
   ```
   npx wrangler pages secret put APP_SECRET
   ```
-- [ ] **T2. Provisionar la VM peruana** `ssh rodrigo@100.75.97.61` (E2.1 + E2.2):
-  venv, pip, playwright, chromium, clonar el repo, y dejar las cookies de Colnect.
-  Shell es `fish` → envolver todo en `bash -lc`. `ADMIN_API_TOKEN` ya está en el
-  entorno de esa VM. Sin esto no hay desde dónde correr el scraper.
-- [ ] **T3. Verificar `/admin` en un navegador real** con sesión de verdad. Todas las
-  capas están probadas por separado; el flujo completo nunca se caminó. Es el último
-  cabo suelto de E0+E1.
+- [x] **T2. VM peruana provisionada** (E2.1 + E2.2), 2026-08-06. `scrapers/venv` con
+  todo lo de `scrapers/requirements.txt`, y Chromium de Playwright verificado
+  arrancando y saliendo a la red. El repo ya estaba clonado — la nota vieja que decía
+  lo contrario estaba desactualizada. `ADMIN_API_TOKEN` está en el entorno.
+  ```
+  scrapers/venv/bin/python -m pytest scrapers/test_parse.py    # 18 passed
+  ```
+- [x] **T3. `/admin` revisado**, 2026-08-06. El flujo entra y funciona. Apareció otra
+  cosa: el menú lateral listaba **2 secciones de 7**. Sellos, Catálogos, Grupos,
+  Usuarios y Analítica estaban implementadas y solo se llegaba tecleando la URL.
+  Ya están enlazadas.
+- [ ] **T3b. Falta todavía**: no hay página de admin para revisar la cola del scraper
+  ni el estado de los 14,396 pendientes. Hoy eso se mira por SSH.
 
 ### No técnico — depende de vos
 
-- [ ] **T4. Pagar ancho de banda del proxy.** El scraper de Colnect está parado por
-  falta de GB en DataImpulse, no por código. Es la única razón por la que hay 14,396
-  sellos en cola sin procesar.
-- [ ] **T5. Revisar los términos de Colnect** antes de escalar de 36k a 500k sellos.
-  Riesgo legal, no técnico. Es la decisión #3 de abajo y es la que puede tirar abajo
-  todo el plan de scraping si sale mal — conviene mirarla **antes** de gastar en T4.
+- [~] **T4. Ancho de banda del proxy — puede que no haga falta.** El proxy existía solo
+  para que las peticiones salieran de una IP residencial. **Esta VM ya es una**: su
+  salida es `179.7.15.36`, `AS12252 América Móvil Perú` (Claro), residencial, en Piura.
+  Verificado desde la máquina. El scraper ahora corre sin proxy por defecto
+  (`USE_PROXY=1` lo reactiva). **La razón que queda para pagarlo no es anonimato, es
+  rotación de IP**: un crawl largo sin frenos puede hacer que bloqueen esa dirección, y
+  sin proxy esa dirección es tu conexión real de Claro, no una alquilada. Empezá lento
+  y con volumen bajo; pagá solo si Colnect te frena de verdad.
+- [x] **T5. Términos de Colnect: habilitan el acceso.** Confirmado por Rodrigo,
+  hablado directamente con ellos (2026-08-06). Decisión #3 cerrada.
 
-Con T1-T4 resueltos, el ciclo de subir sellos queda así y no necesita más código:
+Con T1 resuelto, el ciclo de subir sellos queda así y no necesita más código:
 
 ```
 E2.7  correr la fase de detalle sobre los 14,396 pendientes  (probar con 3 primero)
@@ -214,8 +226,21 @@ UI ya están desplegados esperándolos. **No hace falta otro deploy.**
   ventas cerradas de eBay, catálogo comercial licenciado, o precios de la propia comunidad.
   Cada una con coste legal y técnico distinto.
 - [ ] **2. ¿Qué escala de condición?** Determina el diseño completo de E6.
-- [ ] **3. ¿Los términos de Colnect permiten este uso?** Riesgo legal a evaluar antes de escalar
-  de 36k a 500k sellos scrapeados.
+- [x] **3. ¿Los términos de Colnect permiten este uso?** **Sí.** Rodrigo lo habló
+  directamente con Colnect y habilitan el acceso (2026-08-06). Esto no solo desbloquea
+  escalar: si hay permiso explícito, vale la pena preguntarles si tienen API o export
+  de datos. Scrapear es la peor forma de obtener datos que alguien te daría igual.
+
+### Alcance de E5 y E6, definido 2026-08-06
+
+Ambas son **por suscriptor, sobre los sellos de su propia colección** — no una
+valoración global del catálogo. Es decir: el valor que se calcula es el de *tu*
+colección (Σ precio × multiplicador de condición × cantidad, sobre tus filas de
+`UserCollection`), y el grado por IA se aplica a *la foto de tu ejemplar*, no al
+sello del catálogo. Eso ya está bien encaminado en el esquema: `UserCollection`
+tiene `quantity` y `condition` por usuario, y E6.5 guarda el grado sugerido
+separado del declarado. Lo que sigue faltando para E5 es de dónde sale el precio
+(decisión #1) y para E6 qué escala se usa (decisión #2).
 
 ---
 

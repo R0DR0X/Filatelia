@@ -1,0 +1,30 @@
+-- D1 Migration v14: declare the currency of every existing Product as USD.
+--
+-- WHY: 0011 added `Product.currency` and deliberately left it NULL on every
+-- row, because `Product.price` mixes soles and dollars with nothing in the
+-- data saying which. `priceOrder` refuses to price a NULL-currency row, so
+-- since 0011 landed the store cannot take an order at all. That refusal was
+-- the correct default — guessing would have silently mispriced whichever rows
+-- were actually soles — but it is a default, not an answer.
+--
+-- THE ANSWER CAME FROM THE OPERATOR, NOT FROM THE DATA. Rodrigo confirmed on
+-- 2026-08-06 that all 13 catalogue rows are priced in dollars. That is the
+-- only reason this file can exist: nothing in the database could have
+-- established it, and no exchange rate exists anywhere in this codebase.
+--
+-- SCOPED TO ROWS THAT HAVE NOT DECLARED ONE. The WHERE clause is what makes
+-- this safe to re-run and, more importantly, what stops it from overwriting a
+-- currency somebody sets deliberately later. A bare `UPDATE Product SET
+-- currency = 'USD'` would re-dollarise every soles row on its next run — the
+-- exact failure 0011 was written to prevent, reintroduced by the migration
+-- that resolves it.
+--
+-- NOT A LICENCE TO DEFAULT FUTURE ROWS. New products still arrive with
+-- currency NULL and still cannot be sold until someone declares one. That is
+-- intentional: the next batch of products is not covered by a statement
+-- Rodrigo made about these 13.
+--
+-- NOT EXECUTED BY THIS CHANGE. Committed as a reviewable artifact only;
+-- applying it is a separate, explicitly authorized step.
+
+UPDATE Product SET currency = 'USD' WHERE currency IS NULL;

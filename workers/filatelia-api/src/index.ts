@@ -438,6 +438,9 @@ app.get('/groups/:countryCode', async (c) => {
 // ==========================================
 // ENDPOINT: stamp by ID
 // ==========================================
+// `SELECT s.*` means the four E3 columns added by migration 0012
+// (colnectCode, format, emission, gum) reach the detail page with no change
+// here. Variants are a separate table, so they need their own read.
 app.get('/stamp/:id', async (c) => {
   try {
     const { id } = c.req.param();
@@ -449,12 +452,33 @@ app.get('/stamp/:id', async (c) => {
       LEFT JOIN Country co ON s.countryCode = co.code
       WHERE s.id = ?
     `).bind(id).all();
-    
+
     if (!results || results.length === 0) {
       return c.json({ success: false, error: 'Stamp not found' }, 404);
     }
-    
-    return c.json({ success: true, stamp: results[0] });
+
+    // The detail scraper has not run yet, so today this is empty for every
+    // stamp in production. A missing StampVariant table (a deploy that landed
+    // ahead of migration 0012) must not turn a working ficha into a 500
+    // either — the page renders fine without a variants section, so an
+    // unreadable variants table degrades to "no variants" rather than
+    // taking the whole stamp down with it.
+    let variants: unknown[] = [];
+    try {
+      const variantRows = await c.env.DB.prepare(`
+        SELECT id, colnectCode, nameEs, nameEn, description,
+               denomination, currency, color, perforation, gum, "format",
+               imageUrl, sourceUrl
+        FROM StampVariant
+        WHERE stampId = ?
+        ORDER BY "order" ASC, id ASC
+      `).bind(id).all();
+      variants = variantRows.results || [];
+    } catch {
+      variants = [];
+    }
+
+    return c.json({ success: true, stamp: results[0], variants });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
@@ -480,6 +504,11 @@ app.get('/stamps', async (c) => {
     const countryCode = c.req.query('countryCode');
     const search      = c.req.query('search');
     const source      = c.req.query('source');
+    // E3.6: the detail page links country, theme and series into this listing.
+    // `countryCode` already existed; these two did not, so the theme and
+    // series links would have landed on an unfiltered catalogue.
+    const theme       = c.req.query('theme');
+    const groupId     = c.req.query('groupId');
     const page        = Math.max(1, parseInt(c.req.query('page') || '1'));
     const limit       = Math.min(100, parseInt(c.req.query('limit') || '50'));
     const offset      = (page - 1) * limit;
@@ -487,8 +516,12 @@ app.get('/stamps', async (c) => {
     const conditions: string[] = [];
     const bindParams: any[] = [];
 
-    // By default, only show stamps that have a countryCode (exclude Wikidata-only without country)
-    if (!countryCode && !catalogId) {
+    // By default, only show stamps that have a countryCode (exclude
+    // Wikidata-only without country). Any explicit narrowing filter opts out:
+    // a caller who asked for one specific theme or series has already stated
+    // what they want, and silently also demanding a country would make a link
+    // from the detail page return fewer stamps than the page itself lists.
+    if (!countryCode && !catalogId && !theme && !groupId) {
       conditions.push('s.countryCode IS NOT NULL');
     }
 
@@ -496,6 +529,11 @@ app.get('/stamps', async (c) => {
     if (countryCode) { conditions.push('s.countryCode = ?'); bindParams.push(countryCode); }
     if (search)      { conditions.push('(s.nameEs LIKE ? OR s.nameEn LIKE ?)'); bindParams.push(`%${search}%`, `%${search}%`); }
     if (source)      { conditions.push('s.source = ?');      bindParams.push(source); }
+    // Exact match, not LIKE: these come from a stored value the page linked
+    // to, not from a user's free-text search. A LIKE would make "Aves" also
+    // return "Aves marinas".
+    if (theme)       { conditions.push('s.theme = ?');       bindParams.push(theme); }
+    if (groupId)     { conditions.push('s.groupId = ?');     bindParams.push(groupId); }
 
     const yearFrom = c.req.query('yearFrom');
     const yearTo   = c.req.query('yearTo');
@@ -915,6 +953,82 @@ function validateCountryPayload(
   return { id: derivedId, code, nameEs, nameEn };
 }
 
+// A single Colnect stamp lists a handful of variants, not hundreds. The cap
+// exists because the variant array is caller-supplied and each entry costs a
+// prepared statement against the Worker's CPU budget; a payload claiming
+// 10,000 variants must be truncated rather than allowed to burn the whole
+// batch's time. Truncation is reported to the caller, never silent.
+const MAX_VARIANTS_PER_STAMP = 50;
+
+/**
+ * Upsert a stamp's variants, keyed on the variant's own Colnect URL.
+ *
+ * Returns null on success, or a human-readable reason on failure. It never
+ * throws: variants are supplementary detail, and losing them must not cost
+ * the caller a stamp row that already persisted correctly.
+ */
+async function upsertVariants(c: any, stampId: string, variants: any): Promise<string | null> {
+  if (!Array.isArray(variants) || variants.length === 0) return null;
+
+  const capped = variants.slice(0, MAX_VARIANTS_PER_STAMP);
+  const truncated = variants.length > capped.length
+    ? `truncated ${variants.length} to ${MAX_VARIANTS_PER_STAMP}`
+    : null;
+
+  try {
+    const stmts: D1PreparedStatement[] = [];
+    for (let i = 0; i < capped.length; i++) {
+      const v = capped[i] || {};
+      const sourceUrl = typeof v.sourceUrl === 'string' && v.sourceUrl ? v.sourceUrl : null;
+      // Without a URL there is no stable key to upsert on, so the id is
+      // derived from the parent stamp and the variant's position. A re-scrape
+      // that returns the variants in the same order overwrites in place;
+      // one that reorders them rewrites the set, which is still correct
+      // because the row content is fully replaced below.
+      const id = typeof v.id === 'string' && v.id
+        ? v.id
+        : sourceUrl
+          ? await generateUUIDv5('12345678-1234-5678-1234-567812345678', sourceUrl)
+          : `${stampId}-var-${i}`;
+
+      stmts.push(
+        c.env.DB.prepare(`
+          INSERT INTO StampVariant (
+            id, stampId, colnectCode, nameEs, nameEn, description,
+            denomination, currency, color, perforation, gum, "format",
+            imageUrl, sourceUrl, "order"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            colnectCode  = COALESCE(excluded.colnectCode, colnectCode),
+            nameEs       = COALESCE(excluded.nameEs, nameEs),
+            nameEn       = COALESCE(excluded.nameEn, nameEn),
+            description  = COALESCE(excluded.description, description),
+            denomination = COALESCE(excluded.denomination, denomination),
+            currency     = COALESCE(excluded.currency, currency),
+            color        = COALESCE(excluded.color, color),
+            perforation  = COALESCE(excluded.perforation, perforation),
+            gum          = COALESCE(excluded.gum, gum),
+            "format"     = COALESCE(excluded."format", "format"),
+            imageUrl     = COALESCE(excluded.imageUrl, imageUrl),
+            "order"      = excluded."order",
+            updatedAt    = datetime('now')
+        `).bind(
+          id, stampId, v.colnectCode || null,
+          v.nameEs || v.nameEn || null, v.nameEn || null, v.description || null,
+          typeof v.denomination === 'number' ? v.denomination : null,
+          v.currency || null, v.color || null, v.perforation || null,
+          v.gum || null, v.format || null,
+          v.imageUrl || null, sourceUrl, i
+        )
+      );
+    }
+    if (stmts.length > 0) await c.env.DB.batch(stmts);
+    return truncated;
+  } catch (e: any) {
+    return e?.message || 'unknown error';
+  }
+}
+
 // Extracted so `/import-stamp` (used by the scrapers) and `/admin/import-stamp`
 // (reachable through the Next admin proxy, which only forwards to Worker
 // `/admin/<path>`) can never drift: both routes register the exact same
@@ -1086,15 +1200,24 @@ async function importStampHandler(c: any) {
           // D1 doesn't expose changes_made easily; count as inserted (ON CONFLICT handles updates)
           results.inserted++;
         } else {
+          // The ON CONFLICT target below requires a UNIQUE index on
+          // `sourceUrl`. Until migration 0013 created one, SQLite rejected
+          // this statement at PARSE time — "ON CONFLICT clause does not match
+          // any PRIMARY KEY or UNIQUE constraint" — so it never inserted
+          // anything. Since Colnect rows carry no wnsNumber, they all take
+          // this branch: that is the "last batch persisted 0 of 3" in
+          // PENDIENTES.md E2.6. Pinned by test/stamp-detail-schema.test.mjs.
           await c.env.DB.prepare(`
             INSERT INTO Stamp (
               id, scottNumber, michelNumber, yvertNumber,
               countryCode, year, issueDate, denomination, currency,
               nameEs, nameEn, descriptionEs, descriptionEn,
               theme, tags, color, perforation, printTechnique, paperType,
+              sizeMm, designer, printer, engraver,
+              colnectCode, "format", "emission", gum,
               imageUrl, imageThumbUrl, imageBackUrl, groupId, countryId, source, sourceUrl,
               isVerified, isRare
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
             ON CONFLICT(sourceUrl) DO UPDATE SET
               scottNumber   = COALESCE(excluded.scottNumber, scottNumber),
               michelNumber  = COALESCE(excluded.michelNumber, michelNumber),
@@ -1112,6 +1235,14 @@ async function importStampHandler(c: any) {
               perforation   = COALESCE(excluded.perforation, perforation),
               printTechnique= COALESCE(excluded.printTechnique, printTechnique),
               paperType     = COALESCE(excluded.paperType, paperType),
+              sizeMm        = COALESCE(excluded.sizeMm, sizeMm),
+              designer      = COALESCE(excluded.designer, designer),
+              printer       = COALESCE(excluded.printer, printer),
+              engraver      = COALESCE(excluded.engraver, engraver),
+              colnectCode   = COALESCE(excluded.colnectCode, colnectCode),
+              "format"      = COALESCE(excluded."format", "format"),
+              "emission"    = COALESCE(excluded."emission", "emission"),
+              gum           = COALESCE(excluded.gum, gum),
               imageUrl      = CASE WHEN excluded.imageUrl LIKE '%none_logged_image%' THEN imageUrl ELSE COALESCE(excluded.imageUrl, imageUrl) END,
               imageThumbUrl = CASE WHEN excluded.imageThumbUrl LIKE '%none_logged_image%' THEN imageThumbUrl ELSE COALESCE(excluded.imageThumbUrl, imageThumbUrl) END,
               imageBackUrl  = CASE WHEN excluded.imageBackUrl LIKE '%none_logged_image%' THEN imageBackUrl ELSE COALESCE(excluded.imageBackUrl, imageBackUrl) END,
@@ -1125,12 +1256,21 @@ async function importStampHandler(c: any) {
             stamp.descriptionEs || null, stamp.descriptionEn || null,
             stamp.theme || null, tags, stamp.color || null,
             stamp.perforation || null, stamp.printTechnique || null, stamp.paperType || null,
+            stamp.sizeMm || null, stamp.designer || null, stamp.printer || null, stamp.engraver || null,
+            stamp.colnectCode || null, stamp.format || null, stamp.emission || null, stamp.gum || null,
             stamp.imageUrl || null, stamp.imageThumbUrl || null, stamp.imageBackUrl || null,
             groupId, stamp._countryId,
             stamp.source || 'scraper', stamp.sourceUrl || null
           ).run();
           results.inserted++;
         }
+
+        // Deliberately NOT inside the per-stamp failure path: the stamp row
+        // itself persisted, and reporting it as failed would make the scraper
+        // re-send a stamp that is already correct. A variant problem is
+        // reported as an error the operator can read, not as a retry.
+        const variantError = await upsertVariants(c, stampId, stamp.variants);
+        if (variantError) results.errors.push(`${stampId} variants: ${variantError}`);
       } catch (e: any) {
         results.errors.push(`${stamp.wnsNumber || stamp.nameEn}: ${e.message}`);
         results.failedIds.push(stampId || stamp.sourceUrl || stamp.wnsNumber || '');

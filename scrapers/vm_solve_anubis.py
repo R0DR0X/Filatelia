@@ -14,18 +14,25 @@ import sys
 import time
 from playwright.async_api import async_playwright
 
+from scraper_env import require_env
+
 TARGET_URL  = "https://colnect.com/en/stamps"
 MAX_WAIT_S  = 120
 
 # Member Credentials
-MEMBER_USER = "sinnombre31415@gmail.com"
-MEMBER_PASS = "a3GRQ2HSyKsM7EjkT16pnUFXm5Bgcd"
+MEMBER_USER = require_env("COLNECT_USERNAME", "Colnect account email/username")
+MEMBER_PASS = require_env("COLNECT_PASSWORD", "Colnect account password")
+
+# DataImpulse premium proxy (User A)
+DATAIMPULSE_USER = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
+DATAIMPULSE_PASS = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
+DATAIMPULSE_HOST = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
 
 async def solve_for_session(sessid, output_path):
     proxy_config = {
-        "server":   "http://gw.dataimpulse.com:823",
-        "username": f"bafe165ec82f735291ea__sessid.{sessid}",
-        "password": "cba7f2ea0d940de4"
+        "server":   f"http://{DATAIMPULSE_HOST}",
+        "username": f"{DATAIMPULSE_USER}__sessid.{sessid}",
+        "password": DATAIMPULSE_PASS
     }
     
     print(f"\n==================================================")

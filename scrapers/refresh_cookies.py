@@ -7,18 +7,20 @@ import json
 from pathlib import Path
 from playwright.async_api import async_playwright
 
+from scraper_env import require_env
+
 SCRIPT_DIR = Path(__file__).parent
 COOKIES_PATH_1 = SCRIPT_DIR / "colnect_cookies.json"
 COOKIES_PATH_2 = SCRIPT_DIR.parent / "colnect_cookies.json"
 
-USERNAME = "sinnombre31415@gmail.com"
-PASSWORD = "a3GRQ2HSyKsM7EjkT16pnUFXm5Bgcd"
+USERNAME = require_env("COLNECT_USERNAME", "Colnect account email/username")
+PASSWORD = require_env("COLNECT_PASSWORD", "Colnect account password")
 
 # User B is active (User A has 407 TRAFFIC_EXHAUSTED)
 PROXY_CONFIG = {
-    "server": "http://gw.dataimpulse.com:823",
-    "username": "ce2dd5be999d7e7e9a05",
-    "password": "b93d4b8e9a554c41"
+    "server": f"http://{require_env('DATAIMPULSE_HOST', 'DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)')}",
+    "username": require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)"),
+    "password": require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
 }
 
 async def refresh():

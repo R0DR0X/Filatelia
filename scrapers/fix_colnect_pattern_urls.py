@@ -30,6 +30,8 @@ import re
 import sys
 import time
 
+from scraper_env import require_env
+
 API_URL = "https://filatelia-api.rodrigopianto2005.workers.dev/query"
 
 HEADERS = {
@@ -41,12 +43,10 @@ HEADERS = {
 
 # --- DataImpulse residential proxy (colnect.net/colnect.com block Google Cloud IPs) ---
 # Reuses the same DataImpulse gateway pattern as scrapers/image_resolver.py and
-# scrapers/colnect_swarm_crawler.py, overridable via env vars (no env-var loading
-# mechanism existed anywhere in scrapers/ prior to this change; the defaults below
-# match the credentials already hardcoded in the sibling scripts).
-DATAIMPULSE_USER = os.environ.get("DATAIMPULSE_USER", "ce2dd5be999d7e7e9a05")
-DATAIMPULSE_PASS = os.environ.get("DATAIMPULSE_PASS", "b93d4b8e9a554c41")
-DATAIMPULSE_HOST = os.environ.get("DATAIMPULSE_HOST", "gw.dataimpulse.com:823")
+# scrapers/colnect_swarm_crawler.py. Fails fast if unset — see scrapers/scraper_env.py.
+DATAIMPULSE_USER = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
+DATAIMPULSE_PASS = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
+DATAIMPULSE_HOST = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
 PROXY_SESSION_ID = "fix_colnect_pattern_urls"
 PROXY_URL = f"http://{DATAIMPULSE_USER}__sessid.{PROXY_SESSION_ID}:{DATAIMPULSE_PASS}@{DATAIMPULSE_HOST}"
 

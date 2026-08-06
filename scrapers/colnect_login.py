@@ -4,6 +4,8 @@ import json
 import sys
 from playwright.async_api import async_playwright
 
+from scraper_env import require_env
+
 async def run_login():
     # Pedir credenciales por consola de forma segura
     username = input("👤 Ingresá tu usuario o email de Colnect: ").strip()
@@ -15,9 +17,9 @@ async def run_login():
 
     browser_args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-web-security"]
     proxy_config = {
-        "server": "http://gw.dataimpulse.com:823",
-        "username": "bafe165ec82f735291ea",
-        "password": "cba7f2ea0d940de4"
+        "server": f"http://{require_env('DATAIMPULSE_HOST', 'DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)')}",
+        "username": require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)"),
+        "password": require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
     }
 
     print("\n🌐 Iniciando navegador con Proxy Premium...")

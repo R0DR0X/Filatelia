@@ -47,9 +47,11 @@ DELAY_MAX = 7.0
 CONCURRENT_COUNTRIES = 3
 
 # --- PROXY PREMIUM ---
-PREMIUM_PROXY_SERVER = "gw.dataimpulse.com:823"
-PREMIUM_PROXY_USER = "bafe165ec82f735291ea"
-PREMIUM_PROXY_PASS = "cba7f2ea0d940de4"
+# Leído del entorno; dejar sin definir para deshabilitar el proxy premium
+# (ver el guard `if PREMIUM_PROXY_SERVER:` más abajo).
+PREMIUM_PROXY_SERVER = os.environ.get("DATAIMPULSE_HOST", "")
+PREMIUM_PROXY_USER = os.environ.get("DATAIMPULSE_USER", "")
+PREMIUM_PROXY_PASS = os.environ.get("DATAIMPULSE_PASS", "")
 
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',

@@ -13,11 +13,32 @@
 import fs from 'fs';
 
 const API_URL = process.env.FILATELIA_API_URL || 'https://filatelia-api.rodrigopianto2005.workers.dev';
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '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';
 const CHECKPOINT_FILE = './scrapers/checkpoints/ai-enricher.json';
 const DELAY_MS = 1000;
 const BATCH_SIZE = 5; // Max 5 parallel requests
 const MODEL_NAME = 'anthropic/claude-3.5-sonnet';
+
+/**
+ * Reads `OPENROUTER_API_KEY` from the environment or exits the process with
+ * a clear error. Call this once at scraper startup, before any long-running
+ * enrichment work, so a missing key is never discovered only after stamps
+ * have already been fetched.
+ * @returns {string} the OpenRouter API key
+ */
+export function requireOpenRouterKey() {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) {
+    console.error(
+      '\n❌ OPENROUTER_API_KEY no está definido.\n' +
+        '   El AI enricher necesita una API key de OpenRouter para invocar el modelo.\n' +
+        '   Exporta la variable antes de correr el scraper, por ejemplo:\n' +
+        '     export OPENROUTER_API_KEY="<key>"\n' +
+        '   (generá una key en https://openrouter.ai/keys)\n'
+    );
+    process.exit(1);
+  }
+  return key;
+}
 
 /**
  * Validates and sanitizes CLI arguments to prevent parameter injection
@@ -53,7 +74,7 @@ export function sanitizeCliArgs(argv = process.argv.slice(2)) {
 /**
  * Sanitizes API keys and bearer tokens from log messages
  */
-export function sanitizeLogs(text, secretKey = OPENROUTER_KEY) {
+export function sanitizeLogs(text, secretKey) {
   if (!text || typeof text !== 'string') return text;
   let sanitized = text;
   if (secretKey) {
@@ -163,7 +184,7 @@ export async function enrichStampWithAI(stamp, options = {}) {
     return validateAndNormalizeAIResponse(options.mockResponse);
   }
 
-  const apiKey = options.apiKey || OPENROUTER_KEY;
+  const apiKey = options.apiKey;
   const prompt = `Analiza los siguientes datos filatélicos y devuelve un JSON ESTRICTO con los campos de enriquecimiento:
 
 DATOS DEL SELLO:
@@ -285,6 +306,7 @@ export async function processBatch(stamps, options = {}) {
 }
 
 async function main() {
+  const apiKey = requireOpenRouterKey();
   const config = sanitizeCliArgs();
   const cp = loadCheckpoint();
 
@@ -312,7 +334,7 @@ async function main() {
 
     console.log(`\n📋 Processing batch of ${stamps.length} stamps (offset ${cp.offset})`);
 
-    const results = await processBatch(stamps);
+    const results = await processBatch(stamps, { apiKey });
 
     let failedCount = 0;
     for (let i = 0; i < results.length; i++) {

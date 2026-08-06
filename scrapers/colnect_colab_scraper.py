@@ -55,10 +55,13 @@ DELAY_MAX = 7.0  # Retardo máximo entre páginas (en segundos)
 CONCURRENT_COUNTRIES = 6  # Países en paralelo (reducido para liberar CPU y resolver retos PoW de Anubis)
 
 # --- PROXY PREMIUM (Opcional - ej: DataImpulse) ---
-# Dejar vacíos si se quiere usar proxies públicos gratuitos.
-PREMIUM_PROXY_SERVER = "gw.dataimpulse.com:823"
-PREMIUM_PROXY_USER = "bafe165ec82f735291ea"
-PREMIUM_PROXY_PASS = "cba7f2ea0d940de4"
+# Leído del entorno de Colab (Runtime > variables de entorno, o `os.environ[...] = ...`
+# en una celda previa). Dejar sin definir si se quiere usar proxies públicos gratuitos
+# — este script está pensado para pegarse en una sola celda de Colab, así que no
+# importa un helper compartido; el chequeo vive acá mismo.
+PREMIUM_PROXY_SERVER = os.environ.get("DATAIMPULSE_HOST", "")
+PREMIUM_PROXY_USER = os.environ.get("DATAIMPULSE_USER", "")
+PREMIUM_PROXY_PASS = os.environ.get("DATAIMPULSE_PASS", "")
 
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -97,9 +100,29 @@ def save_progress(progress):
     except Exception as e:
         print(f"⚠️ Error guardando progreso: {e}")
 
+def require_admin_token():
+    """Reads ADMIN_API_TOKEN from the environment or stops with a clear error.
+
+    POST /import-stamp requires X-Admin-Token now (see
+    workers/filatelia-api/src/index.ts requireAdmin). Standalone Colab cell,
+    so the check lives inline instead of importing scrapers/scraper_env.py.
+    """
+    token = os.environ.get("ADMIN_API_TOKEN")
+    if not token:
+        raise SystemExit(
+            "\n❌ ADMIN_API_TOKEN no está definido.\n"
+            "   POST /import-stamp ahora requiere autenticación (X-Admin-Token).\n"
+            "   Definilo antes de correr esta celda, por ejemplo:\n"
+            "     os.environ['ADMIN_API_TOKEN'] = '<token>'\n"
+            "   (mismo valor que el secreto ADMIN_API_TOKEN del Worker — ver scrapers/README.md)\n"
+        )
+    return token
+
+ADMIN_API_TOKEN = require_admin_token()
+
 # --- SUBIR A CLOUDFLARE ---
 def _post_batch(stamps):
-    headers = {'Content-Type': 'application/json'}
+    headers = {'Content-Type': 'application/json', 'X-Admin-Token': ADMIN_API_TOKEN}
     payload = {'stamps': stamps}
     return requests.post(API_URL, headers=headers, json=payload, timeout=20)
 

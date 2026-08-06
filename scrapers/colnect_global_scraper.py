@@ -53,9 +53,11 @@ success_count = 0
 concurrency_lock = asyncio.Lock()
 
 # --- PROXY PREMIUM ---
-PREMIUM_PROXY_SERVER = "gw.dataimpulse.com:823"
-PREMIUM_PROXY_USER = "bafe165ec82f735291ea"
-PREMIUM_PROXY_PASS = "cba7f2ea0d940de4"
+# Leído del entorno; dejar sin definir para deshabilitar el proxy premium
+# (ver el guard `if PREMIUM_PROXY_SERVER:` más abajo).
+PREMIUM_PROXY_SERVER = os.environ.get("DATAIMPULSE_HOST", "")
+PREMIUM_PROXY_USER = os.environ.get("DATAIMPULSE_USER", "")
+PREMIUM_PROXY_PASS = os.environ.get("DATAIMPULSE_PASS", "")
 
 # Namespace para generación determinista de UUIDs v5
 NAMESPACE_PHILATELY = uuid.UUID('12345678-1234-5678-1234-567812345678')
@@ -123,8 +125,28 @@ def save_progress(progress):
     except Exception as e:
         print(f"⚠️ Error guardando progreso: {e}")
 
+def require_admin_token():
+    """Reads ADMIN_API_TOKEN from the environment or stops with a clear error.
+
+    POST /import-stamp requires X-Admin-Token now (see
+    workers/filatelia-api/src/index.ts requireAdmin). Standalone Colab-style
+    script, so the check lives inline instead of importing scrapers/scraper_env.py.
+    """
+    token = os.environ.get("ADMIN_API_TOKEN")
+    if not token:
+        raise SystemExit(
+            "\n❌ ADMIN_API_TOKEN no está definido.\n"
+            "   POST /import-stamp ahora requiere autenticación (X-Admin-Token).\n"
+            "   Definilo antes de correr este script, por ejemplo:\n"
+            "     export ADMIN_API_TOKEN=\"<token>\"\n"
+            "   (mismo valor que el secreto ADMIN_API_TOKEN del Worker — ver scrapers/README.md)\n"
+        )
+    return token
+
+ADMIN_API_TOKEN = require_admin_token()
+
 def _post_batch(stamps):
-    headers = {'Content-Type': 'application/json'}
+    headers = {'Content-Type': 'application/json', 'X-Admin-Token': ADMIN_API_TOKEN}
     payload = {'stamps': stamps}
     return requests.post(API_URL, headers=headers, json=payload, timeout=20)
 

@@ -17,12 +17,15 @@ E0 (seguridad) ─┬─> E1 (auth) ──> E4 (cuenta) ──> E5 (valoración)
 **En producción y funcionando**: E0, E1, E3 y E4. Las migraciones 0009-0015
 están aplicadas en D1. Worker y Pages desplegados.
 
-**Ya no queda nada bloqueando "solo subir sellos".** Al 2026-08-06 está todo cerrado:
-`APP_SECRET` rotado, la VM de Piura provisionada, `/admin` revisado y con sus siete
-secciones enlazadas, Colnect habilitó el acceso, y se sigue con DataImpulse.
+**No queda desarrollo pendiente.** Al 2026-08-06: `APP_SECRET` rotado, VM de Piura
+provisionada, `/admin` revisado y con sus siete secciones enlazadas, Colnect habilitó
+el acceso, y se sigue con DataImpulse.
 
-Lo único que falta es **saldo en el proxy**, y después correr E2.7 y E2.8. Eso no es
-desarrollo, es operación.
+Lo que falta para volver a subir sellos es **operación, y son cuatro cosas concretas**
+—ver "Estado real de E2.7 / E2.8" más abajo—: recuperar el checkpoint `.db` que vive
+en otra máquina, poner las credenciales del proxy y de Colnect en el entorno, cargar
+saldo, y **pedirle a Colnect que ponga la IP de la VM en lista blanca** para no tener
+que pelear con su anti-bot ahora que dieron permiso.
 
 **E5 (valoración) y E6 (IA de condición) NO bloquean subir sellos.** Están
 esperando decisiones de producto tuyas, no código. Se pueden dejar quietas
@@ -212,15 +215,39 @@ Todo lo demás está hecho. Esto es lo que queda, en orden.
 - [x] **T5. Términos de Colnect: habilitan el acceso.** Confirmado por Rodrigo,
   hablado directamente con ellos (2026-08-06). Decisión #3 cerrada.
 
-Con T1 resuelto, el ciclo de subir sellos queda así y no necesita más código:
-
-```
-E2.7  correr la fase de detalle sobre los 14,396 pendientes  (probar con 3 primero)
-E2.8  reanudar la fase de listado (61,981 páginas)
-```
-
 Las fichas se llenan solas a medida que entran los datos: el esquema, el Worker y la
 UI ya están desplegados esperándolos. **No hace falta otro deploy.**
+
+### Estado real de E2.7 / E2.8, auditado en la VM el 2026-08-06
+
+No se pueden correr todavía. Tres bloqueos, verificados en la máquina:
+
+1. **La cola no existe en esta VM.** `colnect_v3_progress.db` no está. Ahí viven las
+   dos tablas del checkpoint: `listing_pages` (las 61,981 páginas) y `stamp_queue`
+   (los 14,396 sellos). Sin ese archivo, la fase de detalle abre una base nueva,
+   encuentra 0 pendientes y no hace nada. **Los 14,396 están en otra máquina** —
+   probablemente la de Colab, por `colnect_colab_progress.json`. Hay que recuperar
+   ese `.db` o volver a construir la cola.
+2. **Eso invierte el orden.** `stamp_queue` la llena la fase de listado. En esta
+   máquina, sin el `.db` recuperado, **E2.8 va antes que E2.7**, no al revés.
+3. **Faltan credenciales**: `DATAIMPULSE_HOST/USER/PASS` y `COLNECT_USER/PASS` no
+   están en el entorno. `ADMIN_API_TOKEN` sí. El proxy es obligatorio por defecto,
+   así que sin las tres de DataImpulse el scraper ni arranca.
+
+Y un hallazgo aparte, que importa más que los tres:
+
+4. **Colnect está detrás de Anubis.** Una petición directa desde la IP de la VM
+   devuelve **HTTP 485 con cuerpo vacío** — un desafío anti-bot, no la página. Las
+   cookies guardadas son del 23 de julio. Este repo ya carga con herramientas para
+   pelear contra eso (`vm_solve_anubis.py`, `test_anubis_bypass.py`,
+   `temp_anubis_bypass.html`), o sea que es una pelea vieja.
+
+   **Ahora que Colnect dio permiso explícito, esa pelea no hay que darla: hay que
+   pedir que la eviten.** Lo que corresponde pedirles es que pongan la IP de la VM
+   (`179.7.15.36`) en lista blanca, o una cuenta habilitada para acceso automatizado.
+   Mantener un solucionador de proof-of-work contra un sitio que te autorizó es
+   gastar trabajo y ancho de banda en un problema que ellos apagan con un click —
+   y que se vuelve a encender cada vez que cambien el desafío.
 
 ---
 

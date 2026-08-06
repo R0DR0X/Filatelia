@@ -147,6 +147,24 @@ else
   ORDER_TABLES="no"
 fi
 
+printf '\n'
+info "Checking Product for the currency column (migration 0011)..."
+# This check was missing from the first version of this script, which is
+# exactly the kind of gap that makes a green rollout lie. `priceOrder` in
+# src/lib/db/orders.ts selects `p.currency` from Product; without the column
+# that query fails with "no such column", so checkout breaks for every
+# Product line — a harder failure than the NULL-currency refusal the column
+# is actually there to express.
+currency_col=$(d1_query "SELECT COUNT(*) AS n FROM pragma_table_info('Product') WHERE name = 'currency';") || die_on_d1
+if echo "$currency_col" | grep -qE '"n":\s*0'; then
+  bad "Product has NO currency column. Migration 0011 has not been applied."
+  info "orders.ts selects p.currency, so checkout fails outright without it."
+  CURRENCY_COL="no"
+else
+  ok "Product has the currency column."
+  CURRENCY_COL="yes"
+fi
+
 # ---------------------------------------------------------------------------
 step "Phase 2 — database migrations"
 # ---------------------------------------------------------------------------
@@ -174,6 +192,25 @@ if [[ "$ORDER_TABLES" != "yes" ]]; then
   fi
 else
   ok "0010 not needed."
+fi
+
+printf '\n'
+if [[ "$CURRENCY_COL" != "yes" ]]; then
+  info "0011_add_product_currency.sql adds a nullable currency column to"
+  info "Product. It does NOT populate it: Product.price is stored in mixed,"
+  info "unlabelled currencies, and defaulting every row to USD would silently"
+  info "misprice whichever rows are actually soles."
+  warn "AFTER this lands, priceOrder refuses to price any Product whose"
+  warn "currency is still NULL — which is every row. The store cannot take"
+  warn "orders until an operator declares a currency per sellable row."
+  warn "That is the intended behaviour: refusing to sell beats guessing a"
+  warn "price. Find the rows that need one with:"
+  warn "  SELECT id, name, price FROM Product WHERE currency IS NULL;"
+  if gated "apply 0011 to production D1"; then
+    npx wrangler d1 execute "$DB_NAME" --remote --file="$MIGRATIONS_DIR/0011_add_product_currency.sql" && ok "0011 applied" || bad "0011 failed"
+  fi
+else
+  ok "0011 not needed."
 fi
 
 # ---------------------------------------------------------------------------

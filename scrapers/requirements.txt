@@ -1,0 +1,33 @@
+# Python dependencies for the scrapers.
+#
+# Derived from the actual imports across scrapers/*.py — until now they were
+# not declared anywhere, so provisioning a machine meant reading the source
+# and guessing. The Peru VM (100.75.97.61) is provisioned from this file.
+#
+#     python3 -m venv scrapers/venv
+#     scrapers/venv/bin/pip install -r scrapers/requirements.txt
+#     scrapers/venv/bin/playwright install chromium
+#
+# Versions are left unpinned deliberately: this is an operator tool run by
+# hand on one machine, not a deployed artifact, and a stale pin here would be
+# a silent source of "works on my box". Pin them the day a scraper run has to
+# be reproducible.
+
+# Page fetching and parsing
+playwright          # headless chromium; the Colnect pages need JS
+beautifulsoup4      # imported as bs4
+requests            # D1 import calls in colnect_global_scraper_v3
+httpx               # async fetches in the swarm crawler
+
+# Data handling
+pandas              # excel/CSV import paths
+pycountry           # ISO country code resolution
+
+# The dashboard (scrapers/dashboard.py)
+flask
+
+# Colab-only notebook helper; harmless elsewhere
+nest_asyncio
+
+# Tests (scrapers/test_parse.py)
+pytest

@@ -45,9 +45,28 @@ API_URL      = "https://filatelia-api.rodrigopianto2005.workers.dev/import-stamp
 QUERY_URL    = "https://filatelia-api.rodrigopianto2005.workers.dev/query"
 
 # ── Proxy (DataImpulse residential User B - active) ─────────────────────────
-PROXY_SERVER = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
-PROXY_USER   = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
-PROXY_PASS   = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
+# The DataImpulse proxy is OPTIONAL, and defaults to off.
+#
+# Its only job was to make requests come from a residential IP. The machine
+# this scraper is meant to run on — the Piura VM, 100.75.97.61 — already has
+# one: its egress is 179.7.15.36, AS12252 América Móvil Perú (Claro), a
+# residential Peruvian connection. Paying a proxy to borrow the kind of IP the
+# host already has is buying something you own.
+#
+# Set USE_PROXY=1 to turn it back on, and then the three DataImpulse
+# variables become required. The reason to turn it on is NOT anonymity — it is
+# IP rotation. A long unthrottled crawl from one address risks that address
+# being blocked, and here that address is the VM's real Claro connection, not
+# a rented one. Prefer a slow, polite crawl first; reach for the proxy if
+# Colnect actually pushes back.
+USE_PROXY = os.environ.get("USE_PROXY", "").strip().lower() in {"1", "true", "yes"}
+
+if USE_PROXY:
+    PROXY_SERVER = require_env("DATAIMPULSE_HOST", "DataImpulse proxy gateway host:port (dashboard.dataimpulse.com)")
+    PROXY_USER   = require_env("DATAIMPULSE_USER", "DataImpulse proxy username (dashboard.dataimpulse.com)")
+    PROXY_PASS   = require_env("DATAIMPULSE_PASS", "DataImpulse proxy password (dashboard.dataimpulse.com)")
+else:
+    PROXY_SERVER = PROXY_USER = PROXY_PASS = None
 
 # ── Admin auth for /import-stamp ─────────────────────────────────────────────
 ADMIN_TOKEN = require_admin_token()
@@ -893,23 +912,33 @@ async def stop_playwright(playwright):
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def make_context(playwright):
-    """Create Playwright browser context with User B proxy."""
-    proxy = {
-        "server":   f"http://{PROXY_SERVER}",
-        "username": PROXY_USER,
-        "password": PROXY_PASS,
+    """Create a Playwright browser context, optionally behind the proxy.
+
+    Without USE_PROXY the requests leave from the host's own address, which on
+    the Piura VM is already a residential Claro Peru connection. See the
+    USE_PROXY comment near the top for why that is the default.
+    """
+    context_options = {
+        "user_agent": random.choice(USER_AGENTS),
+        "viewport": {"width": 1280, "height": 720},
+        "locale": "en-US",
+        # Only claim a US timezone when a US-ish proxy exit is actually in
+        # use. Announcing America/New_York from a Peruvian IP is a mismatch a
+        # fingerprinter can read, so unproxied runs tell the truth instead.
+        "timezone_id": "America/New_York" if USE_PROXY else "America/Lima",
     }
+    if USE_PROXY:
+        context_options["proxy"] = {
+            "server":   f"http://{PROXY_SERVER}",
+            "username": PROXY_USER,
+            "password": PROXY_PASS,
+        }
+
     browser = await playwright.chromium.launch(
         headless=True,
         args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-web-security"],
     )
-    context = await browser.new_context(
-        proxy=proxy,
-        user_agent=random.choice(USER_AGENTS),
-        viewport={"width": 1280, "height": 720},
-        locale="en-US",
-        timezone_id="America/New_York",
-    )
+    context = await browser.new_context(**context_options)
     await context.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined})")
 
     if COOKIES_FILE.exists():

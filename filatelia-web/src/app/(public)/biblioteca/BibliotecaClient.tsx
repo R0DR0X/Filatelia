@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Globe, ChevronLeft, ChevronRight, X, SlidersHorizontal, Library } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { parseBrowseFilters } from "@/lib/stampDetail";
 
 const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
 
@@ -117,10 +119,40 @@ export default function BibliotecaClient() {
   const [yearTo, setYearTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Active (applied) filters
-  const [applied, setApplied] = useState({ search: "", country: "", yearFrom: "", yearTo: "" });
+  // Active (applied) filters.
+  //
+  // `theme` and `groupId` have no input of their own: they only ever arrive as
+  // a link from a stamp's detail page, and are surfaced as a removable chip
+  // below rather than as another text box nobody would type into.
+  const [applied, setApplied] = useState({
+    search: "", country: "", yearFrom: "", yearTo: "", theme: "", groupId: "",
+  });
 
   const topRef = useRef<HTMLDivElement>(null);
+
+  // Until this existed the catalogue ignored its own query string, so the
+  // `/biblioteca?countryCode=PE` link that the detail page has always rendered
+  // navigated here and then showed the unfiltered catalogue — a dead link that
+  // looks alive. E3.6 adds two more such links, so this had to be fixed first.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const fromUrl = parseBrowseFilters(new URLSearchParams(searchParams.toString()));
+    const next = {
+      search: fromUrl.search ?? "",
+      country: fromUrl.countryCode ?? "",
+      yearFrom: fromUrl.yearFrom ?? "",
+      yearTo: fromUrl.yearTo ?? "",
+      theme: fromUrl.theme ?? "",
+      groupId: fromUrl.groupId ?? "",
+    };
+    // Seed the visible inputs too, so the filter panel reflects the URL.
+    setSearch(next.search);
+    setCountry(next.country);
+    setYearFrom(next.yearFrom);
+    setYearTo(next.yearTo);
+    setApplied(next);
+    setPage(1);
+  }, [searchParams]);
 
   const fetchStamps = useCallback((p: number, filters: typeof applied) => {
     setLoading(true);
@@ -129,6 +161,8 @@ export default function BibliotecaClient() {
     if (filters.search) params.set("search", filters.search);
     if (filters.yearFrom) params.set("yearFrom", filters.yearFrom);
     if (filters.yearTo) params.set("yearTo", filters.yearTo);
+    if (filters.theme) params.set("theme", filters.theme);
+    if (filters.groupId) params.set("groupId", filters.groupId);
 
     fetch(`${API}/stamps?${params}`)
       .then((r) => r.json())
@@ -145,7 +179,9 @@ export default function BibliotecaClient() {
   }, [page, applied, fetchStamps]);
 
   const applyFilters = () => {
-    const next = { search, country, yearFrom, yearTo };
+    // theme/groupId carry over: they came from a link, and typing in the
+    // search box must not silently drop the series the user is browsing.
+    const next = { search, country, yearFrom, yearTo, theme: applied.theme, groupId: applied.groupId };
     setApplied(next);
     setPage(1);
     setShowFilters(false);
@@ -154,7 +190,12 @@ export default function BibliotecaClient() {
 
   const clearAll = () => {
     setSearch(""); setCountry(""); setYearFrom(""); setYearTo("");
-    setApplied({ search: "", country: "", yearFrom: "", yearTo: "" });
+    setApplied({ search: "", country: "", yearFrom: "", yearTo: "", theme: "", groupId: "" });
+    setPage(1);
+  };
+
+  const clearLinkedFilter = (key: "theme" | "groupId") => {
+    setApplied((prev) => ({ ...prev, [key]: "" }));
     setPage(1);
   };
 
@@ -163,7 +204,9 @@ export default function BibliotecaClient() {
     topRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const hasFilters = applied.search || applied.country || applied.yearFrom || applied.yearTo;
+  const hasFilters =
+    applied.search || applied.country || applied.yearFrom || applied.yearTo ||
+    applied.theme || applied.groupId;
 
   return (
     <div className="min-h-screen bg-black" ref={topRef}>
@@ -296,6 +339,14 @@ export default function BibliotecaClient() {
                 label={`Años: ${applied.yearFrom || "?"}–${applied.yearTo || "?"}`}
                 onRemove={() => { setYearFrom(""); setYearTo(""); setApplied((a) => ({ ...a, yearFrom: "", yearTo: "" })); setPage(1); }}
               />
+            )}
+            {/* Arrived here from a stamp's detail page. Without these chips the
+                catalogue would silently show a subset with no visible reason. */}
+            {applied.theme && (
+              <Chip label={`Tema: ${applied.theme}`} onRemove={() => clearLinkedFilter("theme")} />
+            )}
+            {applied.groupId && (
+              <Chip label="Serie" onRemove={() => clearLinkedFilter("groupId")} />
             )}
           </div>
         )}

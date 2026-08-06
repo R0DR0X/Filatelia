@@ -3,42 +3,19 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Stamp, Calendar, MapPin, DollarSign, Palette, Shield, Tag, Hash, Loader2 } from "lucide-react";
+import { ArrowLeft, Stamp, Calendar, MapPin, DollarSign, Palette, Shield, Tag, Layers, Loader2 } from "lucide-react";
 import CollectionControl from "@/components/collection/CollectionControl";
 import { formatOrderMoney } from "@/lib/checkout";
+import {
+  buildCatalogRefs,
+  buildTechnicalSpecs,
+  buildBrowseLinks,
+  buildVariantLabel,
+  type StampDetail,
+  type StampVariant,
+} from "@/lib/stampDetail";
 
 const API = "https://filatelia-api.rodrigopianto2005.workers.dev";
-
-interface StampDetail {
-  id: string;
-  wnsNumber: string | null;
-  scottNumber: string | null;
-  countryCode: string | null;
-  countryNameEs: string | null;
-  countryNameEn: string | null;
-  year: number | null;
-  issueDate: string | null;
-  denomination: number | null;
-  currency: string | null;
-  nameEs: string | null;
-  nameEn: string | null;
-  descriptionEs: string | null;
-  descriptionEn: string | null;
-  imageUrl: string | null;
-  theme: string | null;
-  source: string | null;
-  isVerified: number;
-  isRare: number;
-  marketPriceUsd: number | null;
-  rarityScore: number | null;
-  groupTitleEs: string | null;
-  groupTitleEn: string | null;
-  color: string | null;
-  perforation: string | null;
-  printRun: number | null;
-  designer: string | null;
-  printer: string | null;
-}
 
 function InfoCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
@@ -63,6 +40,7 @@ function TechRow({ label, value }: { label: string; value: string }) {
 
 export default function SelloDetailClient({ id }: { id: string }) {
   const [stamp, setStamp] = useState<StampDetail | null>(null);
+  const [variants, setVariants] = useState<StampVariant[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -72,6 +50,9 @@ export default function SelloDetailClient({ id }: { id: string }) {
       .then((d) => {
         if (d.success && d.stamp) {
           setStamp(d.stamp);
+          // A Worker deployed before this change answers without `variants`
+          // at all, so this must never assume the key is present.
+          setVariants(Array.isArray(d.variants) ? d.variants : []);
         } else {
           setNotFound(true);
         }
@@ -108,6 +89,10 @@ export default function SelloDetailClient({ id }: { id: string }) {
   const hasEnglishName = stamp.nameEn && stamp.nameEn !== stamp.nameEs;
   const countryDisplay = stamp.countryNameEs || stamp.countryCode || null;
 
+  const catalogRefs = buildCatalogRefs(stamp);
+  const technicalSpecs = buildTechnicalSpecs(stamp);
+  const browse = buildBrowseLinks(stamp);
+
   return (
     <div className="min-h-screen bg-[#0a0906]">
       {/* Breadcrumb */}
@@ -115,14 +100,11 @@ export default function SelloDetailClient({ id }: { id: string }) {
         <Link href="/biblioteca" className="hover:text-moss-green-light transition-colors flex items-center gap-1.5">
           <ArrowLeft size={14} /> Catálogo
         </Link>
-        {stamp.countryCode && (
+        {browse.country && (
           <>
             <span>/</span>
-            <Link
-              href={`/biblioteca?countryCode=${stamp.countryCode}`}
-              className="hover:text-moss-green-light transition-colors"
-            >
-              {countryDisplay}
+            <Link href={browse.country.href} className="hover:text-moss-green-light transition-colors">
+              {browse.country.label}
             </Link>
           </>
         )}
@@ -161,21 +143,20 @@ export default function SelloDetailClient({ id }: { id: string }) {
                 )}
               </div>
 
-              {/* Catalog refs */}
-              <div className="flex flex-wrap justify-center gap-2 mt-4">
-                {stamp.wnsNumber && (
-                  <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-zinc-900 border border-white/10 rounded-lg font-mono">
-                    <span className="text-zinc-500">WNS</span>
-                    <span className="text-moss-green-light">{stamp.wnsNumber}</span>
-                  </span>
-                )}
-                {stamp.scottNumber && (
-                  <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-zinc-900 border border-white/10 rounded-lg font-mono">
-                    <span className="text-zinc-500">Scott</span>
-                    <span className="text-moss-green-light">{stamp.scottNumber}</span>
-                  </span>
-                )}
-              </div>
+              {/* Catalog refs — WNS, Scott, Michel, Yvert and the Colnect code */}
+              {catalogRefs.length > 0 && (
+                <div className="flex flex-wrap justify-center gap-2 mt-4">
+                  {catalogRefs.map((ref) => (
+                    <span
+                      key={ref.label}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-zinc-900 border border-white/10 rounded-lg font-mono"
+                    >
+                      <span className="text-zinc-500">{ref.label}</span>
+                      <span className="text-moss-green-light">{ref.value}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -194,11 +175,18 @@ export default function SelloDetailClient({ id }: { id: string }) {
               {hasEnglishName && (
                 <p className="text-zinc-500 text-sm italic">{stamp.nameEn}</p>
               )}
-              {stamp.groupTitleEs && (
+              {browse.series ? (
+                <Link
+                  href={browse.series.href}
+                  className="inline-block text-xs text-zinc-600 hover:text-moss-green-light transition-colors mt-1 uppercase tracking-wider"
+                >
+                  {browse.series.label}
+                </Link>
+              ) : stamp.groupTitleEs ? (
                 <p className="text-xs text-zinc-600 mt-1 uppercase tracking-wider">
                   {stamp.groupTitleEs}
                 </p>
-              )}
+              ) : null}
             </div>
 
             {/* Key facts */}
@@ -242,31 +230,70 @@ export default function SelloDetailClient({ id }: { id: string }) {
               </div>
             )}
 
-            {/* Technical specs */}
-            {(stamp.color || stamp.perforation || stamp.printRun || stamp.designer || stamp.printer) && (
+            {/* Technical specs — the Colnect field set. Everything the detail
+                scraper has not filled in yet is simply absent, so this whole
+                block disappears rather than showing empty labels. */}
+            {technicalSpecs.length > 0 && (
               <div>
                 <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-3 flex items-center gap-2">
                   <Palette size={12} /> Especificaciones Técnicas
                 </h3>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-                  {stamp.color && <TechRow label="Color" value={stamp.color} />}
-                  {stamp.perforation && <TechRow label="Perforación" value={stamp.perforation} />}
-                  {stamp.printRun && <TechRow label="Tiraje" value={stamp.printRun.toLocaleString("es-PE")} />}
-                  {stamp.designer && <TechRow label="Diseñador" value={stamp.designer} />}
-                  {stamp.printer && <TechRow label="Impresor" value={stamp.printer} />}
+                  {technicalSpecs.map((spec) => (
+                    <TechRow key={spec.label} label={spec.label} value={spec.value} />
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Theme */}
-            {stamp.theme && (
+            {/* Variants — Colnect's "Click to see variants" */}
+            {variants.length > 0 && (
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-3 flex items-center gap-2">
+                  <Layers size={12} /> Variantes ({variants.length})
+                </h3>
+                <ul className="space-y-2">
+                  {variants.map((variant) => (
+                    <li
+                      key={variant.id}
+                      className="flex items-center gap-3 bg-zinc-900/50 border border-white/5 rounded-xl p-3"
+                    >
+                      {variant.imageUrl && (
+                        <div className="relative w-10 h-12 shrink-0 rounded overflow-hidden bg-zinc-800">
+                          <Image
+                            src={variant.imageUrl}
+                            alt={buildVariantLabel(variant)}
+                            fill
+                            className="object-contain"
+                            sizes="40px"
+                            unoptimized
+                          />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-white text-sm truncate">{buildVariantLabel(variant)}</div>
+                        {variant.colnectCode && (
+                          <div className="text-zinc-500 text-[11px] font-mono">{variant.colnectCode}</div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Theme — clickable, like Colnect */}
+            {browse.theme && (
               <div>
                 <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-3 flex items-center gap-2">
                   <Tag size={12} /> Temática
                 </h3>
-                <span className="px-4 py-2 bg-moss-green/10 text-moss-green-light rounded-full text-sm border border-moss-green/20">
-                  {stamp.theme}
-                </span>
+                <Link
+                  href={browse.theme.href}
+                  className="inline-block px-4 py-2 bg-moss-green/10 text-moss-green-light rounded-full text-sm border border-moss-green/20 hover:bg-moss-green/20 transition-colors"
+                >
+                  {browse.theme.label}
+                </Link>
               </div>
             )}
 

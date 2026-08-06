@@ -424,9 +424,13 @@ def parse_listing_page(html, country_id, country_code):
                 "scottNumber":  _extract_code("Sn", catalog_codes),
                 "michelNumber": _extract_code("Mi", catalog_codes),
                 "yvertNumber":  _extract_code("Yt", catalog_codes),
-                "theme":        themes_str.replace("|", ",") or None,
-                "color":        colors or None,
-                "descriptionEs": description,
+                # Routed through _clean_cell for the same reason the detail
+                # parser is: this is the phase that actually ran, and it is
+                # where the 3,280 "Login to see complete item details" themes
+                # in production came from.
+                "theme":        _clean_cell(themes_str.replace("|", ",")),
+                "color":        _clean_cell(colors),
+                "descriptionEs": _clean_cell(description),
                 "source":       "colnect",
                 "sourceUrl":    source_url,
                 "series":       series or None,
@@ -451,6 +455,23 @@ def _resolve_colnect_country_id(basic_data, country_id=None):
     return ""
 
 
+# Colnect serves its own copy in the cells we read whenever the session is
+# unauthenticated or rate-limited. Stored verbatim, those messages become
+# "data": production ended up with 3,280 stamps whose theme was
+# "Login to see complete item details" and 591 reading "Confirm you are human
+# to view details", cleaned out by migration 0015. Nothing stopped the next
+# listing run from writing them straight back, so they are refused here.
+#
+# WHOLE-CELL MATCH, NOT A SUBSTRING. 110 production stamps carry a genuine
+# "Human Rights" theme; a substring rule keyed on "human" would have destroyed
+# every one of them. Comparison is lowercased and stripped because the exact
+# wording and casing belong to Colnect, not to us.
+_SCRAPER_ARTIFACT_CELLS = frozenset({
+    "login to see complete item details",
+    "confirm you are human to view details",
+})
+
+
 def _clean_cell(value):
     """Normalise a scraped cell to a real value or None.
 
@@ -458,11 +479,18 @@ def _clean_cell(value):
     treats "" as a value, not as an absence. Returning an empty string here
     would make the detail phase OVERWRITE a good listing-phase value with
     nothing — the run would destroy data instead of enriching it.
+
+    Cells that are Colnect's anti-bot/paywall message rather than a value are
+    treated the same as an empty cell: unknown, so None.
     """
     if value is None:
         return None
     text = str(value).strip()
-    return text or None
+    if not text:
+        return None
+    if text.lower() in _SCRAPER_ARTIFACT_CELLS:
+        return None
+    return text
 
 
 def _parse_variants(soup, source_url):

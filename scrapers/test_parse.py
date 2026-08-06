@@ -35,7 +35,22 @@ for _var in (
 ):
     os.environ.setdefault(_var, "test-placeholder-not-a-credential")
 
-from colnect_global_scraper_v3 import parse_detail_page  # noqa: E402
+from colnect_global_scraper_v3 import parse_detail_page, parse_listing_page  # noqa: E402
+
+
+def _listing_html(theme_value):
+    """One listing item whose Themes cell holds `theme_value`."""
+    return f"""
+    <html><body>
+      <div class="pl-it">
+        <h2 class="item_header"><a href="/en/stamps/stamp/42-Test">Test Stamp</a></h2>
+        <div class="i_d">
+          <div>Themes:{theme_value}</div>
+          <div>Colors:Blue</div>
+        </div>
+      </div>
+    </body></html>
+    """
 
 
 TARANAKI_URL = "https://colnect.com/en/stamps/stamp/1234567-Mt_Taranaki-New_Zealand"
@@ -168,6 +183,77 @@ def test_absent_detail_fields_come_back_as_none_not_empty_string():
     for field in ("sizeMm", "format", "emission", "gum", "colnectCode", "perforation"):
         assert parsed[field] is None, f"{field} must be None when the page omits it"
     assert parsed["color"] == "Blue"
+
+
+# ── Colnect's anti-bot copy must never be stored as data ────────────────────
+
+@pytest.mark.parametrize("junk", [
+    "Login to see complete item details",
+    "Confirm you are human to view details",
+    "  login to see complete item details  ",
+])
+def test_antibot_text_is_not_stored_as_a_theme(junk):
+    # An unauthenticated or rate-limited Colnect page serves its own message in
+    # the cell the parser reads. Production ended up with 3,280 stamps whose
+    # "theme" was "Login to see complete item details" and 591 reading
+    # "Confirm you are human to view details" — cleaned out by migration 0015.
+    # Nothing stopped the next run from writing them straight back, so the
+    # parser now refuses them at the source. Matching is case- and
+    # whitespace-insensitive because the page wording is not under our control.
+    parsed = parse_detail_page(
+        f"<html><head><title>X</title></head><body><div class='i_d'><dl>"
+        f"<dt>Themes:</dt><dd>{junk}</dd></dl></div></body></html>",
+        "https://colnect.com/en/stamps/stamp/9-X",
+        {"nameEn": "X"},
+    )
+    assert parsed["theme"] is None
+
+
+def test_a_real_theme_containing_the_word_human_is_kept():
+    # 110 production stamps carry a genuine "Human Rights" theme. A substring
+    # rule would have destroyed every one of them; the guard matches the whole
+    # cell, not a fragment of it.
+    parsed = parse_detail_page(
+        "<html><head><title>X</title></head><body><div class='i_d'><dl>"
+        "<dt>Themes:</dt><dd>Antiracism, Human Rights, Nobel Laureates</dd>"
+        "</dl></div></body></html>",
+        "https://colnect.com/en/stamps/stamp/10-X",
+        {"nameEn": "X"},
+    )
+    assert parsed["theme"] == "Antiracism, Human Rights, Nobel Laureates"
+
+
+def test_antibot_text_is_rejected_in_any_detail_field():
+    # The same message lands in whichever cell the parser happens to read, so
+    # the guard belongs in the shared cleaner rather than on `theme` alone.
+    parsed = parse_detail_page(
+        "<html><head><title>X</title></head><body><div class='i_d'><dl>"
+        "<dt>Gum:</dt><dd>Login to see complete item details</dd>"
+        "<dt>Colors:</dt><dd>Blue</dd></dl></div></body></html>",
+        "https://colnect.com/en/stamps/stamp/11-X",
+        {"nameEn": "X"},
+    )
+    assert parsed["gum"] is None
+    assert parsed["color"] == "Blue"
+
+
+def test_the_listing_phase_also_refuses_antibot_text():
+    # This is the phase that actually ran against production, so it is where
+    # the 3,280 bad themes came from. Guarding only the detail parser would
+    # have fixed the half that never executed.
+    stamps, _ = parse_listing_page(
+        _listing_html("Login to see complete item details"), "173", "NZ"
+    )
+    assert len(stamps) == 1
+    assert stamps[0]["theme"] is None
+    assert stamps[0]["color"] == "Blue"
+
+
+def test_the_listing_phase_keeps_a_real_theme():
+    stamps, _ = parse_listing_page(
+        _listing_html("Antiracism, Human Rights, Nobel Laureates"), "173", "NZ"
+    )
+    assert stamps[0]["theme"] == "Antiracism, Human Rights, Nobel Laureates"
 
 
 def test_whitespace_only_cells_are_treated_as_missing():
